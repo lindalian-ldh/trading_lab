@@ -1,0 +1,118 @@
+实现说明
+创建 scripts/run_leader_pipeline.py，把原本需手动串接的链路自动化：
+
+bankuai 扫龙头 → calc_indicators 批量筛查 → 按通过维度过滤 → yanbao/sell_monitor 衔接 → 龙头池沉淀回 stock_mapping.json
+
+设计取舍
+bankuai / yanbao-info / PNG 报告：用 subprocess 调 CLI（要拉 zzshare/PDF，重，且 CLI 自带 token/env 处理）
+calc_indicators 筛查：同样用 subprocess + 正则解析稳定输出（一开始试过 in-process 调 _evaluate_stock，但 calc_indicators 的 config.py 与项目根 config/ 包命名冲突被 core.logger 提前缓存遮蔽；subprocess 方案与 run_all.py 风格一致，且不被内部 API 变更影响）
+sell_monitor：只打印登记命令不自动登记——系统是纯信号，进场需人确认 entry-price
+参数速查
+参数	默认	控制场景
+--date	昨天	参考日期
+--plate-type	概念	板块类型 概念/题材/行业
+--sectors	空	指定板块名（逗号分隔），非空仅扫这些
+--top-n-sectors	3	热门板块取前 N 作为龙头池来源
+--tiers	tier1,tier2	参与筛查的梯队（可加 tier3）
+--max-stocks	10	龙头池上限（限频保护）
+-p/--profile	aggressive_short	calc_indicators 配置档
+--min-pass	2	进入后续阶段的最少通过维度数（1/2/3）
+--with-yanbao	off	对通过标的拉研报（慢）
+--with-sell-init	off	打印 sell_monitor 登记命令
+--report	off	为通过标的生成 PNG 报告
+--no-update-mapping	off	不写回 stock_mapping.json
+--rescan-bankuai	off	强制重扫板块（忽略当天 JSON）
+--bankuai-json	空	直接用指定 JSON（跳过扫描，最快）
+--dry-run	off	只输出龙头池不筛查
+用法示例
+
+Bash
+
+# 默认：概念板块 Top3，tier1+tier2，aggressive_short，至少 2 维通过
+uv run python scripts/run_leader_pipeline.py
+
+# 行业板块 + 超短线 + 生成 PNG
+uv run python scripts/run_leader_pipeline.py --plate-type 行业 -p ultra_short --report
+
+# 指定板块 + 三梯队 + 研报 + sell_monitor 登记命令
+uv run python scripts/run_leader_pipeline.py --sectors 电力 --tiers tier1,tier2,tier3 \
+    --with-yanbao --with-sell-init
+
+# 预览龙头池（不触网不筛查）
+uv run python scripts/run_leader_pipeline.py --dry-run
+
+# 复用已有 bankuai JSON（跳过 zzshare 扫描）
+uv run python scripts/run_leader_pipeline.py --bankuai-json data/reports/bankuai/bankuai_2026-08-26_行业.json
+测试验证（均通过）
+--dry-run：龙头池提取 + stock_mapping 沉淀计数 + 报告生成
+真实筛查：600095 湘财股份 → A✅B✅C❌（2/3，盈亏比 0.32，止损 7.65，止盈 10.17，建议 526 股）正确解析
+--with-sell-init：正确生成 --init --entry-price 9.55 --shares 526 登记命令并提示人工确认
+stock_mapping「不覆盖已有名称」逻辑生效（二次运行 +0 条）
+产出：data/reports/pipeline/leaders_{date}.json + .md（含龙头池表 + 筛查结果表 + 通过标的后续衔接段）。
+
+注：stock_mapping.json 测试期写入的 2 条已恢复为原始种子，留给用户实际运行时沉淀。
+
+run_all.py
+完成总结
+重写了 scripts/run_all.py，从「固定 4 任务硬编码」改为场景驱动 + 注册表的批量编排器。
+
+顺带修了原文件的 2 个 bug
+原 PIPELINE 引用 services/fetch_klines/main.py ——该服务不存在，跑必崩
+原 calc_indicators 调用没传 symbol ——而它是必填位置参数，会报错退出
+5 个场景预设（--scenario）
+场景	顺序执行的服务	用途
+daily（默认）	alarming → bankuai → news → holdings → report	日常盘后
+macro	macro_data → macro_charts	宏观复盘
+stock（需 --symbol）	calc → yanbao → sell → report	单标的复盘
+pipeline	run_leader_pipeline	龙头批量筛查
+full	macro + daily + pipeline（+ stock 若给 symbol）	完整复盘
+参数控制（覆盖不同复盘场景）
+参数	默认	作用
+-s/--scenario	daily	选预设场景
+--date	昨天	参考日
+--symbol	空	个股代码（stock 必填，full 给了更全）
+-p/--profile	aggressive_short	配置档，透传 calc/alarming/sell/pipeline
+--plate-type	概念	板块类型，透传 bankuai/pipeline
+--report	off	calc 加 -r 生成 PNG
+--include a,b,c	空	场景基础上追加服务
+--exclude a,b,c	空	场景中移除服务
+--skip-slow	off	跳过触网重服务（无网/赶时间）
+--timeout N	600	单任务超时秒数
+--dry-run	off	只打印命令不执行
+--list-services	off	列出所有服务+场景后退出
+用法示例
+
+Bash
+
+uv run scripts/run_all.py                              # 日常盘后
+uv run scripts/run_all.py -s macro                      # 宏观复盘
+uv run scripts/run_all.py -s stock --symbol 600550      # 个股复盘
+uv run scripts/run_all.py -s full --symbol 600550       # 完整复盘
+uv run scripts/run_all.py --skip-slow                    # 跳过慢服务
+uv run scripts/run_all.py --include yanbao --exclude news  # 自定义增删
+uv run scripts/run_all.py --dry-run -v                   # 预览命令
+uv run scripts/run_all.py --list-services                # 查服务清单
+设计要点
+服务注册表（SERVICES 字典）：每个服务声明 cmd/scenarios/slow/needs_symbol，加新服务只改一处
+场景解析（_resolve_services）：scenario 基底 → include 追加 → exclude 移除 → skip-slow 过滤 → 无 symbol 时自动剔除 needs_symbol 服务
+执行隔离：单任务超时（--timeout）+ 全流程硬上限 1800s，失败不阻断后续，末尾打印 ✓/✗ 汇总
+dry-run 全场景验证通过：daily(5)、macro(2)、stock(4)、full+symbol(11)、skip-slow(2)、include/exclude 增删、stock 缺 symbol 报错均符合预期
+
+--help 文档已完善，渲染整洁、无换行断裂。
+
+完成内容
+重写 scripts/run_all.py 的模块 docstring（作为 argparse epilog）为结构化手册，并收紧 --skip-slow 的 help 文案（原文本太长导致 pipeli ne 换行断裂）。
+
+--help 现在分 6 段，初次使用者能一目了然：
+
+usage + options：每个参数一行 help 文案
+场景预设：5 个场景每个都列出服务执行顺序（如 daily: alarming → bankuai → news → holdings → report）
+参数说明：按用途分组（场景与标的 / 配置透传 / 精细控制 / 执行控制）
+服务名速查：列出全部 11 个服务的合法名字，让 --include/--exclude 有据可查
+用法示例：8 个按场景组织的可直接复制命令
+说明：退出码（0/2/N）、参考日规则（早上取昨日/晚上加今日）、失败隔离机制
+关键改进点：
+
+之前场景只写「大盘预警+板块龙头」等文字描述，现在补上实际服务名和执行顺序，方便预判耗时与依赖
+新增服务名速查表，解决 --include/--exclude 不知道填什么的问题（也可用 --list-services 查详情）
+退出码补全（原只写 0/N，现区分 2=参数错误）

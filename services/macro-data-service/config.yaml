@@ -1,0 +1,55 @@
+# 宏观数据获取配置
+# 模块读取本文件：services/macro-data-service/config_loader.py
+
+storage:
+  type: sqlite        # sqlite | parquet
+  overwrite: false    # false=增量去重(按 indicator+date+country), true=全量覆盖
+
+fetch:
+  recent_periods: 1   # 1=仅最近一条(默认), >1=最近N条, 0=全部历史
+  retry: 3            # 网络异常最大重试次数
+  retry_delay: 1.0    # 重试间隔(秒)
+
+sources:
+  akshare:
+    enabled: true
+    priority: 1
+  # 备用数据源可在此扩展（主源失效时按 priority 自动切换，需在 fetchers 中实现适配）
+
+# 指标开关：false 则跳过。键名与 fetchers.REGISTRY 一致
+indicators:
+  # 中国宏观（macro_data 表）
+  cpi_cn:                    { enabled: true }
+  ppi_cn:                    { enabled: true }
+  gdp_cn:                    { enabled: true }
+  pmi_cn:                    { enabled: true }
+  m2_cn:                     { enabled: true }
+  lpr_cn:                    { enabled: true }
+  social_financing_cn:       { enabled: true }
+  industrial_production_cn:  { enabled: true }
+  unemployment_cn:           { enabled: true }
+  # 美国及商品（macro_us_data 表）
+  usa_phs:                   { enabled: true }
+  cons_gold:                 { enabled: true }
+  cons_silver:               { enabled: true }
+  # FRED（pandas-datareader，需配置 FRED_API_KEY）
+  fred_gdp:                  { enabled: true }
+  fred_gdpc1:                { enabled: true }
+  fred_cpiaucsl:             { enabled: true }
+  fred_cpilfesl:             { enabled: true }
+  fred_ppiaco:               { enabled: true }
+  fred_unrate:               { enabled: true }
+  fred_payems:               { enabled: true }
+  fred_icsa:                 { enabled: true }
+  fred_dgs6mo:               { enabled: true }
+  fred_dgs1:                   { enabled: true }
+  fred_dgs10:                  { enabled: true }
+  fred_gs10:                   { enabled: true }   # 10年期国债收益率(月度)，与 CPIAUCSL 等月频指标同图用
+  # FRED 美元指数（贸易加权）
+  fred_dtwexbgs:             { enabled: true }   # 名义广义（日度，活跃）
+  fred_dtwexm:               { enabled: true }   # 名义主要货币（日度，已停止）
+  fred_dtwexo:               { enabled: true }   # 名义其他重要贸易伙伴（日度，已停止）
+  fred_rtwexbgs:             { enabled: true }   # 实际广义（月度，活跃）
+  # 贵金属现货（akshare SGE 上海金/银基准价，CNY 计价）
+  sge_gold:                  { enabled: true }   # 黄金现货(上海金基准价，日度，元/克)
+  sge_silver:                { enabled: true }   # 白银现货(上海银基准价，日度，元/千克)

@@ -1,0 +1,15 @@
+[project]
+name = "trading-lab-macro-data-service"
+version = "0.1.0"
+description = "宏观数据获取模块（akshare 多源）"
+requires-python = ">=3.11"
+# 依赖面文档；实际安装由根 pyproject.toml 统一声明并装入共享 .venv
+dependencies = [
+    "akshare",
+    "pandas>=2.0",
+    "pyarrow>=15.0",
+    "pyyaml>=6.0",
+]
+
+[tool.uv]
+package = false

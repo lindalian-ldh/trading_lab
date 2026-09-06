@@ -1,0 +1,12 @@
+[project]
+name = "trading-lab-bankuai-service"
+version = "0.1.0"
+description = "板块扫描与龙头梯队识别（基于 zzshare 免费接口）"
+requires-python = ">=3.11"
+dependencies = [
+    "zzshare",
+    "pandas>=2.0",
+]
+
+[tool.uv]
+package = false

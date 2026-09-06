@@ -1,0 +1,16 @@
+[project]
+name = "trading-lab-calc-indicators"
+version = "0.3.0"
+description = "开仓前三维度快速筛查工具（结构/动量/赔率）+ 可视化报告"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "efinance",
+    "baostock",
+    "matplotlib>=3.8",
+    "mplfinance>=0.12.10b0",
+]
+
+[tool.uv]
+package = false

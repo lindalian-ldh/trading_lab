@@ -1,0 +1,73 @@
+[project]
+name = "trading-lab"
+version = "0.1.0"
+description = "模块化盘后交易分析工具箱 (Trading Lab)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "python-dotenv>=1.0",
+    # 以下为 core 与各 service 实际运行所需，统一纳入根包依赖，
+    # 使 `uv sync` 一次性装齐共享 .venv（所有脚本从根 `uv run` 执行共用此环境）。
+    # 各 services/*/pyproject.toml 仍保留对应依赖作为各工具的依赖面文档。
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "ccxt>=4.0",
+    "jinja2>=3.1",
+    "beautifulsoup4>=4.12",
+    "playwright>=1.40",
+    # 宏观数据服务 (macro-data-service) 与财经新闻采集 (crawler_news) 所需
+    "akshare>=1.12",
+    "pyarrow>=15.0",
+    "pyyaml>=6.0",
+    "pandas-datareader>=0.10",
+    # 宏观数据图表模块 (macro-charts) 所需
+    "plotly>=5.20",
+    # 技术指标筛查 (calc_indicators) 所需
+    "efinance",
+    "baostock",
+    # 技术指标可视化报告 (calc_indicators 阶段三) 所需
+    "matplotlib>=3.8",
+    "mplfinance>=0.12.10b0",
+    # 板块扫描与龙头梯队识别 (bankuai-service) 所需
+    "zzshare",
+    # 新闻简报 HTML 渲染 (crawler_news 阶段六补齐) 所需
+    "markdown>=3.4",
+    # 市场大跌预警监控 (alarming_monitor) 备份数据源所需
+    "adata",
+    "ta-lib>=0.7.1",
+    # 券商研报 PDF 解析 (yanbao-info) 所需
+    "pdfplumber>=0.10",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["core", "config"]
+
+# uv Workspace：services/* 作为虚拟子成员（package=false），仅作各工具依赖面文档；
+# 实际运行依赖统一由根包声明（见上），`uv sync` 装入共享 .venv。
+[tool.uv.workspace]
+members = ["services/*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "black>=24.0",
+    "ruff>=0.5",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

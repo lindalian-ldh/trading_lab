@@ -1,0 +1,15 @@
+[project]
+name = "trading-lab-alarming-monitor"
+version = "0.1.0"
+description = "市场大跌预警监控系统（三大类指标·5原子信号·降仓位建议）"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "akshare>=1.12",
+    "adata",
+    "zzshare",
+]
+
+[tool.uv]
+package = false

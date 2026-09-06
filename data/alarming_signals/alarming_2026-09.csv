@@ -1,0 +1,13 @@
+﻿run_time,ref_date,risk_level,red_count,effective_red_count,effective_threshold,market_state,adx_value,s1_turnover_ratio,s1_red,s2_divergence,s2_red,s3_ad_ratio,s3_red,s4_dividend_spread,s4_red,s5_growth_ret,s5_red,s6_net_leverage,s6_red,s7_k_value,s7_red,position_advice,advice_desc,data_sufficient
+2026-09-01 21:11:52,2026-09-01,warn,2,2,4,neutral,23.62,0.0194,False,0.9774,False,1.5504,False,-0.0045,False,0.0132,True,0.0247,True,,,8成 → 7成,小幅降低或保持观察,True
+2026-09-02 21:05:37,2026-09-02,high,3,4,3,range,18.47,0.0171,False,1.0013,False,0.323,True,0.0279,False,-0.0266,True,0.0248,True,,,8成 → 5成,震荡市：重仓降至半仓以下，5 信号中超过3个亮红灯,True
+2026-09-02 22:06:27,2026-09-02,high,3,4,3,range,18.47,0.0171,False,1.0013,False,0.323,True,0.0279,False,-0.0266,True,0.0248,True,,,8成 → 5成,震荡市：重仓降至半仓以下，5 信号中超过3个亮红灯,True
+2026-09-03 15:55:07,2026-09-03,high,4,6,3,range,18.47,0.0168,False,1.0013,False,0.5511,True,0.0311,True,-0.0283,True,0.0247,True,,,8成 → 5成,震荡市：重仓降至半仓以下，5 信号中超过3个亮红灯,True
+2026-09-04 15:46:15,2026-09-03,normal,0,0,3,range,16.54,,,,,,,,,,,,,42.3342,False,维持当前仓位,震荡市：0个红灯，未达预警门槛,True
+2026-09-04 21:12:19,2026-09-04,high,4,6,3,range,16.83,0.0193,False,1.0245,False,0.811,True,0.0664,True,-0.0623,True,0.0247,True,42.1044,False,8成 → 5成,震荡市：重仓降至半仓以下，5 信号中超过3个亮红灯,True
+2026-09-04 21:18:38,2026-09-04,normal,0,0,3,range,16.83,,,,,,,,,,,,,42.1044,False,维持当前仓位,震荡市：0个红灯，未达预警门槛,True
+2026-09-04 21:24:34,2026-09-04,normal,0,0,3,range,16.83,,,,,,,,,,,,,42.1044,False,维持当前仓位,震荡市：0个红灯，未达预警门槛,True
+2026-09-04 21:41:08,2026-09-04,high,4,6,3,range,16.79,0.0193,False,0.8364,False,0.811,True,0.0664,True,-0.0623,True,0.0247,True,49.7818,False,8成 → 5成,震荡市：重仓降至半仓以下，5 信号中超过3个亮红灯,True
+2026-09-04 22:06:08,2026-09-04,high,5,7,3,range,16.79,0.0193,False,0.8364,False,0.811,True,0.0664,True,-0.0623,True,0.0247,True,49.78,True,8成 → 5成,震荡市：重仓降至半仓以下，5 信号中超过3个亮红灯,True
+2026-09-04 22:50:02,2026-09-04,high,4,6,3,range,16.79,0.0193,False,0.8364,False,0.811,True,0.0664,True,-0.0623,True,0.0247,True,49.78,False,8成 → 5成,震荡市：重仓降至半仓以下，5 信号中超过3个亮红灯,True
+2026-09-06 10:39:56,2026-09-05,high,2,3,3,range,16.83,0.0193,False,1.0245,False,0.811,True,0.0607,False,-0.0631,True,0.0125,False,42.1,False,8成 → 6成,震荡市加权触发：S4/S5/S6 抽血效应,True

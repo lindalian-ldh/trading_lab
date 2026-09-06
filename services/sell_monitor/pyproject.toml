@@ -1,0 +1,14 @@
+[project]
+name = "trading-lab-sell-monitor"
+version = "0.1.0"
+description = "动态止盈止损与网格卖出监控系统（卖出执行模块）"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "efinance",
+    "matplotlib>=3.8",
+]
+
+[tool.uv]
+package = false

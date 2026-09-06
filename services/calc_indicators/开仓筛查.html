@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>开仓筛查 - 名词解释</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 40px 24px;
+    background: #fafbfc;
+    color: #1f2937;
+    line-height: 1.8;
+  }
+  h1 {
+    font-size: 28px;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #111827;
+  }
+  .subtitle {
+    text-align: center;
+    color: #6b7280;
+    font-size: 14px;
+    margin-bottom: 40px;
+  }
+  h2 {
+    font-size: 20px;
+    margin: 36px 0 16px;
+    padding-left: 14px;
+    border-left: 4px solid #3b82f6;
+    color: #111827;
+  }
+  h3 {
+    font-size: 16px;
+    margin: 20px 0 10px;
+    color: #374151;
+  }
+  p { margin-bottom: 14px; color: #374151; }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 16px 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border: 1px solid #e5e7eb;
+  }
+  .card .icon { font-size: 24px; }
+  .tag {
+    display: inline-block;
+    font-size: 12px;
+    padding: 2px 10px;
+    border-radius: 12px;
+    margin-right: 6px;
+    font-weight: 500;
+  }
+  .tag-blue { background: #eff6ff; color: #1d4ed8; }
+  .tag-green { background: #ecfdf5; color: #047857; }
+  .tag-orange { background: #fff7ed; color: #c2410c; }
+  .tag-purple { background: #f5f3ff; color: #6d28d9; }
+  .formula {
+    background: #f3f4f6;
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-family: "SF Mono", "Menlo", monospace;
+    font-size: 14px;
+    color: #374151;
+    margin: 10px 0;
+  }
+  .highlight { color: #dc2626; font-weight: 600; }
+  .good { color: #059669; font-weight: 600; }
+  .analogy {
+    background: #fffbeb;
+    border-left: 3px solid #f59e0b;
+    padding: 12px 16px;
+    border-radius: 0 8px 8px 0;
+    font-size: 14px;
+    color: #92400e;
+    margin: 12px 0;
+  }
+  .comparison {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  .comparison th, .comparison td {
+    border: 1px solid #e5e7eb;
+    padding: 10px 14px;
+    text-align: left;
+  }
+  .comparison th {
+    background: #f9fafb;
+    font-weight: 600;
+    color: #374151;
+  }
+  .comparison tr:nth-child(even) td { background: #fafbfc; }
+  .divider {
+    height: 1px;
+    background: #e5e7eb;
+    margin: 30px 0;
+  }
+  .footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 12px;
+    margin-top: 40px;
+  }
+</style>
+</head>
+<body>
+
+<h1>📖 开仓筛查 · 名词解释</h1>
+<p class="subtitle">用大白话讲清楚每一个概念，新手也能看懂</p>
+
+<!-- ========== 三维度 ========== -->
+
+<h2>🎯 开仓前要过的三关</h2>
+<p>每次想买一只股票之前，我们用三个维度来判断要不要出手。三个维度都通过，才是一个值得认真考虑的机会。</p>
+
+<div class="card">
+  <span class="tag tag-blue">维度 A</span>
+  <strong>结构 —— 现在形态好不好？</strong>
+  <p>简单说就是看<b>股价的"形状"</b>。</p>
+  <p>两种典型的好形态：</p>
+  <p>① <b>突破</b>：股价冲破了最近一段时间的最高点，就像登山队员翻过了一座山的山顶。这往往意味着上面没有阻力，股价可能继续往上走。</p>
+  <p>② <b>回踩</b>：股价跌到了某条重要均线（比如 MA20）附近，但没有跌破。就像球从空中落到地面的缓冲垫上又弹起来，说明这条均线附近有"支撑力"。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：结构就是看股价的"姿势"好不好——是正在向上突破，还是在稳固支撑？
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-green">维度 B</span>
+  <strong>动量 —— 有没有人在推一把？</strong>
+  <p>动量就是<b>推动股价的力量</b>。我们看三个指标：</p>
+  <p>① <b>MACD 金叉</b>：短期均线从下方穿过长期均线向上方交叉，说明短期走势开始转强。</p>
+  <p>② <b>柱线翻红</b>：MACD 的柱状图从负变正，相当于"发动机从刹车踩成油门"。</p>
+  <p>③ <b>成交量放大</b>：今天的成交量是过去 5 天均量的 1.5 倍以上，说明有资金在大量买入。</p>
+  <p>④ <b>RSI 超卖</b>：RSI 跌到 30 以下，说明之前跌得太狠了，可能要反弹。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：动量就是看"风向"——是风在往上吹（金叉+放量），还是风在往下压？
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-orange">维度 C</span>
+  <strong>赔率 —— 赚的够不够多？</strong>
+  <p>赔率就是<b>"赚多少 vs 亏多少"的比较</b>。</p>
+  <p>举个例子：你以 69 元买入，跌到 55 元止损（亏 14 元），涨到 88 元止盈（赚 19 元）。</p>
+  <div class="formula">赔率 = 盈利空间 ÷ 亏损空间 = 19 ÷ 14 ≈ 1.36</div>
+  <p>我们要求赔率至少 <span class="highlight">2.0</span>，意思是赚的钱至少要亏的钱的两倍。这样即使交易胜率只有 50%，总体还是赚钱的。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：赔率就是"性价比"——冒险 1 块钱，能赚回几块钱才值得？我们的底线是 1 块赚回 2 块。
+  </div>
+</div>
+
+<!-- ========== 三维度专有名词详解 ========== -->
+
+<div class="divider"></div>
+<h2>🔍 各维度专有名词详解（小白进阶）</h2>
+<p>上面是三维度的大白话版本。如果你看到日志里的 <code>偏离度</code>、<code>hist</code>、<code>DIF-DEA</code> 这些词还是一头雾水，这一节帮你逐个讲清楚。</p>
+
+<!-- ===== 结构维度专有名词 ===== -->
+<h3>📐 结构维度（维度 A）专有名词</h3>
+
+<div class="card">
+  <span class="tag tag-blue">K线</span>
+  <strong>K线（蜡烛图）—— 一根棒子记录一天</strong>
+  <p>每一根 K 线由 4 个价格组成：<b>开盘价、收盘价、最高价、最低价</b>。</p>
+  <p>• <b>阳线（红色）</b>：收盘价 > 开盘价，表示今天股价<b>上涨</b>。中间的实体叫"阳线实体"。</p>
+  <p>• <b>阴线（绿色）</b>：收盘价 < 开盘价，表示今天股价<b>下跌</b>。</p>
+  <p>• <b>上影线</b>：从实体向上伸出的细线，代表当天冲高回落的部分。</p>
+  <p>• <b>下影线</b>：从实体向下伸出的细线，代表当天探底回升的部分。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：K 线就像一根"温度计"——红色说明今天热（涨），绿色说明今天冷（跌），上下伸出的线代表当天"试过"但没守住的最高/最低温度。
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-blue">K线形态</span>
+  <strong>K线形态 —— 阳线 / 锤子线（止跌信号）</strong>
+  <p>在回踩判定中，我们要求最后一根 K 线是<b>"止跌形态"</b>，具体来说满足任一即可：</p>
+  <p>① <b>阳线</b>：收盘价 > 开盘价（今天涨了，买盘有力）。</p>
+  <p>② <b>锤子线</b>：下影线长度 > 实体长度 × 2（当天虽然跌过，但被拉回来了，下方有支撑）。</p>
+  <div class="formula">
+止跌形态 = 阳线 (close > open)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;或 锤子线 (下影线 > 实体 × 2)
+  </div>
+  <div class="analogy">
+    💡 <b>小白理解</b>：阳线就像"今天阳光明媚"，锤子线就像"皮球掉到地上又弹起来"——两种都说明下方有人接盘，是止跌的早期信号。
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-blue">均线</span>
+  <strong>均线（MA）—— N 天的平均价格</strong>
+  <p>均线 = 过去 N 天收盘价的平均值，用来反映"近 N 天大家的平均成本"。</p>
+  <p>• <b>MA5</b>：5 日均线，反映近一周平均成本，<b>最敏感</b>，短线常用。</p>
+  <p>• <b>MA10</b>：10 日均线，反映近两周平均成本。</p>
+  <p>• <b>MA20</b>：20 日均线，反映近一个月平均成本，<b>中线生命线</b>。</p>
+  <p>• <b>MA60</b>：60 日均线，反映近三个月平均成本，<b>长线趋势线</b>。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：均线就像"体温计的平均值"——MA5 是最近 5 天的平均体温（变化快），MA60 是最近 60 天的平均体温（变化慢）。股价在均线之上 = 比平均热（强），股价在均线之下 = 比平均冷（弱）。
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-blue">偏离度</span>
+  <strong>偏离度 —— 当前价离均线有多远</strong>
+  <p>偏离度衡量"当前股价"和"均线"之间的距离百分比。</p>
+  <div class="formula">
+偏离度 = |当前价 − 均线值| ÷ 均线值 × 100%
+  </div>
+  <p>举例：当前价 11.80，MA5 = 11.966，则偏离度 = |11.80 − 11.966| / 11.966 ≈ <span class="highlight">1.39%</span>。</p>
+  <p>• <b>偏离度 ≤ 0.3%</b>（aggressive_short 配置）：股价几乎贴在 MA5 上，<b>精准回踩</b>。</p>
+  <p>• <b>偏离度 ≤ 0.5%</b>（default 配置）：股价在均线附近，<b>正常回踩</b>。</p>
+  <p>• <b>偏离度 > 阈值</b>：股价离均线太远，<b>不算回踩</b>（可能在突破，也可能在远离）。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：偏离度就像"你和队伍平均身高的差距"——偏离度小，说明你和队伍站在一起（贴着均线）；偏离度大，说明你站得太靠前或太靠后，不算"回归队伍"。
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-blue">突破</span>
+  <strong>突破 —— 冲破前期高点</strong>
+  <p>当今天收盘价 > 过去 N 天（默认 20 天）的最高价，称为"突破"。</p>
+  <div class="formula">
+突破 = 当前收盘价 > 过去 20 日最高价
+  </div>
+  <p>突破意味着上方阻力被打破，股价可能开启新一轮上涨。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：就像短跑运动员冲破了起跑线前面的"气球拱门"——一旦冲破，前方一片开阔，跑起来更轻松。
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-blue">回踩</span>
+  <strong>回踩 —— 跌到均线附近又站稳</strong>
+  <p>回踩是短线最重要的买点信号。判定一只股票"回踩成功"，需要同时满足：</p>
+  <ul style="margin: 10px 0 10px 22px; color: #374151;">
+    <li><b>① 偏离度</b>：当前价距均线 ≤ 阈值（贴着均线）</li>
+    <li><b>② 均线方向</b>：均线向上（趋势在涨，可选关闭）</li>
+    <li><b>③ 缩量</b>：当前量 < 5 日均量 × 0.7~0.8（卖盘枯竭）</li>
+    <li><b>④ K线形态</b>：阳线或锤子线（止跌信号）</li>
+    <li><b>⑤ 确认窗口</b>：最近 1~2 根 K 线内有回踩动作</li>
+  </ul>
+  <p>任一均线（MA5 或 MA10）通过全部 5 项检查，就算"回踩信号触发"。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：回踩就像"球落到弹簧床上又弹起来"——既要碰到弹簧床（偏离度小），又要弹簧床本身向上（均线向上），还要没人继续往下扔球（缩量），最后弹起来的姿势要对（阳线/锤子线）。
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-blue">缩量</span>
+  <strong>缩量 —— 成交量比平时小</strong>
+  <p>缩量 = 当前成交量 < 过去 5 日平均成交量 × 阈值（如 0.7）。</p>
+  <div class="formula">
+缩量 = 当前量 < 5日均量 × 0.7<br>
+量比 = 当前量 ÷ 5日均量 （量比 < 0.7 即缩量）
+  </div>
+  <p>缩量回踩 = 卖盘枯竭，没人愿意低价卖了，是<b>止跌信号</b>。</p>
+  <p>放量回踩 = 卖盘汹涌，可能还会继续跌，<b>危险信号</b>。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：缩量就像"菜市场没人卖菜了"——卖的人少了，价格自然跌不下去。放量就像"大家都在抛售"——还会继续跌。
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-blue">确认窗口</span>
+  <strong>确认窗口 —— 最近 N 根 K 线内有动作</strong>
+  <p>"确认窗口"= 最近 N 根 K 线（默认 1~2 根）内，是否出现过符合偏离度的回踩动作。</p>
+  <p>• <b>PULLBACK_CONFIRM_BARS = 1</b>：只看今天（aggressive_short 模式）。</p>
+  <p>• <b>PULLBACK_CONFIRM_BARS = 2</b>：今天或昨天任一天回踩都算（steady_short 模式）。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：确认窗口就像"考试有没有补考机会"——1 根 = 只有今天这次机会；2 根 = 今天没考好，昨天考好也算。
+  </div>
+</div>
+
+<div class="card" style="border-left: 4px solid #059669;">
+  <span class="tag tag-green">总结</span>
+  <strong>如何判断是"好的结构"？</strong>
+  <p>一只股票的"结构好"，意味着它处于以下两种状态之一：</p>
+  <p>① <span class="good">突破型好结构</span>：收盘价突破过去 20 日最高价 → 上方无阻力，趋势启动。</p>
+  <p>② <span class="good">回踩型好结构</span>：贴着 MA5/MA10 缩量止跌 → 趋势中的回调买点。</p>
+  <p>判断流程（5 步走）：</p>
+  <div class="formula">
+第一步：偏离度 ≤ 阈值？（贴着均线）<br>
+第二步：均线方向向上？（趋势对）<br>
+第三步：成交量缩量？（卖盘枯竭）<br>
+第四步：K线止跌形态？（阳线/锤子线）<br>
+第五步：确认窗口内有动作？（最近 1~2 天）<br>
+→ 全部 ✅ 才算"好的回踩结构"
+  </div>
+  <div class="analogy">
+    💡 <b>小白理解</b>：好的结构就像"打篮球的好姿势"——既要站位对（贴均线），又要方向对（向上），又要没防守（缩量），又要动作标准（K线形态），又要时机对（确认窗口）。五项全对，才值得出手投篮。
+  </div>
+</div>
+
+<!-- ===== 动量维度专有名词 ===== -->
+<h3>⚡ 动量维度（维度 B）专有名词</h3>
+
+<div class="card">
+  <span class="tag tag-green">MACD</span>
+  <strong>MACD —— 趋势的"加速度计"</strong>
+  <p>MACD（Moving Average Convergence Divergence，指数平滑异同移动平均线）由 3 个值组成：</p>
+  <p>• <b>DIF（快线）</b>：12 日 EMA − 26 日 EMA，反映短期相对长期的强弱。</p>
+  <p>• <b>DEA（慢线）</b>：DIF 的 9 日 EMA，是 DIF 的"平滑版"。</p>
+  <p>• <b>hist（柱状图）</b>：(DIF − DEA) × 2，柱子的高低反映趋势强度。</p>
+  <div class="formula">
+DIF  = EMA(12) − EMA(26)<br>
+DEA  = EMA(DIF, 9)<br>
+hist = (DIF − DEA) × 2
+  </div>
+  <div class="analogy">
+    💡 <b>小白理解</b>：MACD 就像"车速表 + 油门表"——DIF 是车速（短期），DEA 是平均车速（平滑），hist 是油门踩多深（车速比平均快多少）。三者配合能看出"加速还是减速"。
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-green">金叉</span>
+  <strong>MACD 金叉 —— DIF 从下往上穿过 DEA</strong>
+  <p>金叉 = 昨天 DIF 在 DEA 下方（DIF − DEA ≤ 0），今天 DIF 突然跑到 DEA 上方（DIF − DEA > 0）。</p>
+  <div class="formula">
+金叉 = (前日 DIF−DEA ≤ 0) 且 (今日 DIF−DEA > 0)
+  </div>
+  <p>金叉意味着<b>短期走势开始强于长期走势</b>，是经典的<b>买入信号</b>。</p>
+  <p>对应的反义词是<b>死叉</b>（DIF 从上往下穿过 DEA），是卖出信号。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：金叉就像"小车（DIF）从大车（DEA）后面超车到大车前面"——小车跑得快了，说明短期动力足。死叉相反，小车掉到大车后面，短期动力弱了。
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-green">柱线翻红</span>
+  <strong>MACD 柱线翻红 —— hist 从负变正</strong>
+  <p>柱状图 hist = (DIF − DEA) × 2。当 hist 从负数变正数，就叫"柱线翻红"。</p>
+  <div class="formula">
+柱线翻红 = (前日 hist ≤ 0) 且 (今日 hist > 0)
+  </div>
+  <p>hist > 0 时柱子画在零轴上方（红色），hist < 0 时画在下方（绿色）。</p>
+  <p>"翻红"意味着<b>趋势从空头转多头</b>，比金叉更敏感（因为 hist 已经放大 2 倍）。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：柱线翻红就像"温度计从蓝变红"——昨天还冷（绿柱），今天突然热了（红柱），说明趋势刚发生转折。它和金叉其实是"同一件事的两种看法"——金叉看 DIF/DEA 线，翻红看 hist 柱。
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-green">RSI</span>
+  <strong>RSI —— 相对强弱指数（0~100）</strong>
+  <p>RSI（Relative Strength Index）衡量"近期上涨力量 vs 下跌力量"的相对强弱，取值 0~100。</p>
+  <div class="formula">
+RSI = 100 − 100 / (1 + RS)<br>
+RS = N 日平均上涨幅度 ÷ N 日平均下跌幅度 （默认 N=14）
+  </div>
+  <p>• <b>RSI < 30</b>：<span class="good">超卖</span>（卖得太狠了，可能反弹）→ 买入信号</p>
+  <p>• <b>RSI > 70</b>：<span class="highlight">超买</span>（买得太狠了，可能回调）→ 警惕信号</p>
+  <p>• <b>30 ≤ RSI < 70</b>：<b>中性区</b>，没有明确信号。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：RSI 就像"皮筋的拉伸程度"——拉得太长（RSI > 70）会反弹回来（超买），压得太紧（RSI < 30）会弹开（超卖）。中性区就是皮筋松紧正常，没有明显方向。
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-green">RSI 中性</span>
+  <strong>RSI "中性"是什么意思？—— 温度计比喻</strong>
+  <p>RSI 就像一个"<b>温度计</b>"，用来衡量这只股票当前是"太热了"（涨得太疯狂）还是"太冷了"（跌得太狠了）。它的数值在 0 到 100 之间。</p>
+  <p>• <b>低于 30（冷）</b>：属于"<b>超卖</b>"。就像连续几天大降温，股价跌过头了，随时可能出现反弹（比如图上之前跌到 22 元左右时，RSI 已经到了很低的位置）。</p>
+  <p>• <b>高于 70（热）</b>：属于"<b>超买</b>"。就像天气热得发烫，股价涨得过快，随时可能要回调歇口气。</p>
+  <p>• <b>50 左右（中）</b>：图里的 RSI 59.2 就属于"<b>中性</b>"。相当于春秋天，不冷不热。</p>
+  <div class="analogy">
+    💡 <b>给小白的心法</b>：现价 59.2 意味着这只股票目前的上涨动能略微偏强（因为大于 50），但还没到发烫的地步（没到 70）。它没有给出"必须马上卖"的警报，也没有给出"绝对可以抄底"的强烈信号，属于"<b>可以继续观察，但不能冲动追高</b>"的阶段。
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-green">成交量放大</span>
+  <strong>成交量放大 —— 量比 > 1.5</strong>
+  <p>成交量放大 = 今天成交量 > 过去 5 日平均成交量 × 1.5。</p>
+  <div class="formula">
+量比 = 今日成交量 ÷ 5 日平均成交量<br>
+放量 = 量比 > 1.5（默认阈值）
+  </div>
+  <p>放量代表<b>有大资金进场</b>，是动量确认的关键。无量上涨往往是"虚涨"，放量上涨才是"真涨"。</p>
+  <p>• 量比 = 0.69（如日志所示）→ <b>缩量</b>（不到平均的 70%）</p>
+  <p>• 量比 = 1.5 → 临界值（达到阈值）</p>
+  <p>• 量比 = 2.0 → <b>明显放量</b></p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：成交量就像"菜市场的客流量"——平时 100 人/天（均量），今天突然来了 150 人（量比 1.5），说明有大买家进场，市场活跃了。如果今天只有 69 人（量比 0.69），说明市场冷清。
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-green">大盘过滤</span>
+  <strong>大盘过滤 —— 看大盘做个股</strong>
+  <p>职业交易员铁律："<b>看大盘，做个股</b>"。同一金叉信号，大盘暴涨时成功率高，大盘暴跌时往往是诱多。</p>
+  <p>大盘过滤检查两项：</p>
+  <p>① <b>趋势判定</b>：大盘指数是否站上 MA20（20 日均线）？</p>
+  <p>② <b>当日涨跌幅</b>：大盘今日涨跌幅是否 ≥ 阈值（如 -0.5%）？</p>
+  <div class="formula">
+大盘通过 = (收盘价 > MA20) 且 (今日涨跌幅 ≥ BENCHMARK_MIN_CHANGE_PCT)
+  </div>
+  <p>• <b>ENABLE_MARKET_FILTER = True</b>：开启过滤，大盘不通过则维度 B 失败。</p>
+  <p>• <b>ENABLE_MARKET_FILTER = False</b>：关闭过滤，只看个股动量（长线价投常用）。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：大盘就像"天气"，个股就像"出门郊游"。晴天（大盘涨）出门顺利，暴雨天（大盘跌）出门容易淋湿。短线必须看天气（开启过滤），长线价投不在乎天气（关闭过滤，跌了反而便宜）。
+  </div>
+</div>
+
+<div class="card" style="border-left: 4px solid #059669;">
+  <span class="tag tag-green">总结</span>
+  <strong>动量通过的判定逻辑</strong>
+  <p>动量维度要"通过"，需要满足以下任一<b>个股信号</b>（开大盘过滤时还要叠加大盘通过）：</p>
+  <div class="formula">
+个股动量通过 = MACD金叉 ∨ MACD柱线翻红 ∨ RSI超卖 ∨ 成交量放大<br>
+（四个信号满足任一即可）<br><br>
+最终通过 = 个股动量通过 ∧ 大盘通过（若开启大盘过滤）<br>
+         = 个股动量通过（若关闭大盘过滤）
+  </div>
+  <p>RSI 中性 / RSI 超买<b>不算</b>个股动量信号，只是状态显示。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：动量维度就像"四选一考试"——只要金叉、柱线翻红、RSI超卖、放量这四题中答对一题就算通过（个股动量）；但开了大盘过滤的话，还要加一道"附加题"——大盘也得通过，否则一票否决。
+  </div>
+</div>
+
+<!-- ========== 三种派别 ========== -->
+
+<div class="divider"></div>
+<h2>⚔️ 三种止损止盈的"派别"</h2>
+<p>算赔率的第一步是确定"从哪里止损"和"到哪里止盈"。不同的人有不同的看法，于是形成了三种派别。</p>
+
+<div class="card">
+  <span class="tag tag-blue">swing</span>
+  <strong>结构派 —— 看近期的"山头"和"谷底"</strong>
+  <p>核心思想：<b>市场近期走到哪里，我就在哪里设关卡</b>。</p>
+  <p>• <b>止损价</b> = 过去 20 天的最低价（谷底）<br>
+     如果跌破近期谷底，说明走势真的变弱了。</p>
+  <p>• <b>止盈价</b> = 过去 20 天的最高价（山头）<br>
+     到了近期的高点，可能会有获利盘涌出。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：就像打球看球门——守门员站在近期最低的那根线防守，前锋瞄准近期最高的那根线进攻。<br>
+    优点：简单直观。缺点：如果股价波动很大，可能止损位很远（亏很多）或很近（容易被震出去）。
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-green">atr</span>
+  <strong>波动率派 —— 根据市场脾气大小来定</strong>
+  <p>核心思想：<b>波动大的股票，给更多空间；波动小的股票，收窄范围</b>。</p>
+  <p>用 ATR（Average True Range，平均真实波幅）来衡量一只股票的"脾气"。</p>
+  <p>• <b>止损价</b> = 现价 − 1.5 × ATR(14)<br>
+     意思是：如果跌了 1.5 倍的"日常波动幅度"，就算不正常了。</p>
+  <p>• <b>止盈价</b> = 现价 + 3.0 × ATR(14)<br>
+     止盈空间是止损空间的 2 倍，保持盈亏比。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：就像开车——在高速上跟车距离远一点，在市区跟车距离近一点。<br>
+    优点：自适应不同股票的波动性格。缺点：ATR 是统计值，极端行情下可能失效。
+  </div>
+</div>
+
+<div class="card">
+  <span class="tag tag-orange">fixed</span>
+  <strong>固定派 —— 一刀切的百分比</strong>
+  <p>核心思想：<b>不管股票怎么波动，永远按固定比例来</b>。</p>
+  <p>• <b>止损价</b> = 现价 × (1 − 2%)<br>
+     简单明了：最多接受 2% 的亏损。</p>
+  <p>• <b>止盈价</b> = 现价 + (现价 − 止损价) × 2.0<br>
+     止盈是风险的 2 倍，保持 2:1 的盈亏比。</p>
+  <div class="analogy">
+    💡 <b>小白理解</b>：就像设定闹钟——不管你多困，到了时间必须起。<br>
+    优点：纪律性强，容易执行。缺点：2% 可能对某些股票太紧（被震出去）或太松（亏太多）。
+  </div>
+</div>
+
+<!-- ========== 对比表 ========== -->
+
+<div class="divider"></div>
+<h2>📊 三派对比一览（以 600118 为例）</h2>
+
+<table class="comparison">
+  <tr>
+    <th>对比项</th>
+    <th><span class="tag tag-blue">swing</span> 结构派</th>
+    <th><span class="tag tag-green">atr</span> 波动率派</th>
+    <th><span class="tag tag-orange">fixed</span> 固定派</th>
+  </tr>
+  <tr>
+    <td>止损逻辑</td>
+    <td>前 20 日最低价<br>54.70</td>
+    <td>现价 − 1.5×ATR(14)<br>63.96</td>
+    <td>现价 × (1 − 2%)<br>67.75</td>
+  </tr>
+  <tr>
+    <td>止盈逻辑</td>
+    <td>前 20 日最高价<br>87.59</td>
+    <td>现价 + 3.0×ATR(14)<br>79.47</td>
+    <td>现价 + 风险×2<br>71.90</td>
+  </tr>
+  <tr>
+    <td>盈亏比</td>
+    <td>1.28 : 1 ❌</td>
+    <td>2.00 : 1 ⚠️</td>
+    <td>2.00 : 1 ⚠️</td>
+  </tr>
+  <tr>
+    <td>适合场景</td>
+    <td>趋势明显的股票</td>
+    <td>波动稳定的股票</td>
+    <td>短线操作</td>
+  </tr>
+</table>
+
+<div class="analogy">
+  📌 <b>怎么选？</b> 没有绝对的好坏，根据你的风格：<br>
+  做中线波段 → 选 swing<br>
+  追求科学风控 → 选 atr<br>
+  新手练手、纪律操作 → 选 fixed
+</div>
+
+<!-- ========== 配置方法 ========== -->
+
+<div class="divider"></div>
+<h2>🛠️ 如何切换派别？</h2>
+<p>打开同目录下的 <code>config.py</code>，修改两个参数即可：</p>
+<div class="formula">
+STOP_MODE: str = "swing"   # 改为 "atr" 或 "fixed"<br>
+PROFIT_MODE: str = "swing" # 改为 "atr" 或 "fixed"
+</div>
+<p>注意：STOP_MODE 和 PROFIT_MODE 可以设置为不同的派别，比如止损用 swing，止盈用 atr，灵活组合。</p>
+
+<!-- ========== 市场场景应对方案 ========== -->
+
+<div class="divider"></div>
+<h2>🌊 不同市场场景的应对方案</h2>
+<p>同一个工具，面对不同的市场环境要用不同的"配方"。下面列出 5 种典型场景下推荐的执行命令。</p>
+
+<!-- 场景 1: V 型反弹 -->
+<div class="card">
+  <h3>📊 场景 1：市场 V 型反弹（急跌后快速回升）</h3>
+  <p><b>特征</b>：大盘刚经历急跌，现在开始强力反弹，个股波动剧烈。这时候要：</p>
+  <ul style="margin: 10px 0 10px 22px; color: #374151;">
+    <li>放宽结构容忍度（均线偏离允许更大）</li>
+    <li>用 ATR 自适应止损（避免被毛刺扫掉）</li>
+    <li>降低单笔仓位（轻仓试错）</li>
+    <li>大盘过滤放宽到 -1.0%（容忍反弹初期的震荡）</li>
+  </ul>
+  <p><b>推荐命令</b>：</p>
+  <div class="formula">
+python main.py 600550 -p high_vol -p swing -v --show-config
+  </div>
+  <div class="analogy">
+    💡 <b>解释</b>：<br>
+    • <code>-p high_vol</code>：维度C 切到 ATR 止损，放宽容忍度，仓位降到 0.8%<br>
+    • <code>-p swing</code>：维度B 大盘过滤阈值放宽到 -1.0%（允许反弹初期的回调）<br>
+    • <code>-v</code>：开启详细日志，便于复盘反弹节奏<br>
+    • <code>--show-config</code>：确认叠加后的参数
+  </div>
+</div>
+
+<!-- 场景 2: 单边趋势 -->
+<div class="card">
+  <h3>📈 场景 2：市场单边趋势（牛市上涨 / 熊市下跌）</h3>
+  <p><b>特征</b>：大盘沿一条方向持续走，趋势明确。这时候要：</p>
+  <ul style="margin: 10px 0 10px 22px; color: #374151;">
+    <li>用 swing（结构派）止损，跟着前低防守</li>
+    <li>用 ATR 止盈，让利润奔跑（不急于止盈）</li>
+    <li>大盘过滤保持开启（趋势中突然大跌要警惕）</li>
+    <li>正常仓位（趋势是朋友，不用过度轻仓）</li>
+  </ul>
+  <p><b>推荐命令（牛市上涨）</b>：</p>
+  <div class="formula">
+python main.py 600550 -p trend -p short_term --show-config
+  </div>
+  <div class="analogy">
+    💡 <b>解释</b>：<br>
+    • <code>-p trend</code>：维度C 止损用 swing（结构派），止盈用 ATR（让利润奔跑）<br>
+    • <code>-p short_term</code>：维度B 大盘过滤开启，单日跌幅超 -0.5% 就警告<br>
+    • 趋势中保持纪律：大盘一旦破位立即收手
+  </div>
+  <p><b>熊市下跌中想抄底？</b> 不建议。如果一定要做：</p>
+  <div class="formula">
+python main.py 600550 -p conservative -p long_term -o MIN_RR_RATIO=3.0
+  </div>
+  <div class="analogy">
+    💡 <b>解释</b>：保守配置 + 关闭大盘过滤（熊市大盘必然不达标）+ 把盈亏比门槛提高到 3:1，要求赔率补偿胜率。
+  </div>
+</div>
+
+<!-- 场景 3: 震荡市 -->
+<div class="card">
+  <h3>🌀 场景 3：市场震荡（区间上下波动，无明确方向）</h3>
+  <p><b>特征</b>：大盘在一个区间内反复横盘，个股短线机会多但容易"追在天花板"。这时候要：</p>
+  <ul style="margin: 10px 0 10px 22px; color: #374151;">
+    <li>用稳健短线配置，要求 MA5/MA10 双均线确认</li>
+    <li>要求均线方向向上 + 缩量（避免追高）</li>
+    <li>盈亏比要求严格（2.5:1，震荡中信号质量差）</li>
+    <li>极轻仓（震荡中假信号多）</li>
+  </ul>
+  <p><b>推荐命令</b>：</p>
+  <div class="formula">
+python main.py 600550 -p steady_short -p conservative --show-config
+  </div>
+  <div class="analogy">
+    💡 <b>解释</b>：<br>
+    • <code>-p steady_short</code>：维度A 要求 MA5/MA10 双均线确认 + 趋势向上 + 0.6 倍极度缩量<br>
+    • <code>-p conservative</code>：维度C 盈亏比要求 2.5:1 + 单笔仓位 0.5%（极轻）<br>
+    • 叠加效果：严格筛信号，宁缺毋滥
+  </div>
+  <p><b>如果想稍微放宽（信号太少时）</b>：</p>
+  <div class="formula">
+python main.py 600550 -p steady_short -p conservative -o MIN_RR_RATIO=2.0 -o PULLBACK_MAX_DEVIATION=0.01
+  </div>
+</div>
+
+<!-- 场景 4: 市场暴跌 -->
+<div class="card">
+  <h3>📉 场景 4：市场暴跌（系统性风险，泥沙俱下）</h3>
+  <p><b>特征</b>：大盘单日大跌 > 2%，几乎所有股票都下跌。这时候要：</p>
+  <ul style="margin: 10px 0 10px 22px; color: #374151;">
+    <li><b>最佳策略：空仓观望</b></li>
+    <li>大盘过滤器会自动拦截（short_term 阈值 -0.5%，swing 阈值 -1.0%）</li>
+    <li>若一定要做，必须等大盘企稳（站上 MA20 + 当日反弹）</li>
+  </ul>
+  <p><b>推荐命令（验证大盘是否安全）</b>：</p>
+  <div class="formula">
+python main.py 600550 -p short_term -v
+  </div>
+  <div class="analogy">
+    💡 <b>解释</b>：<br>
+    • 大盘过滤器会直接拒绝（"大盘今日大跌 X%，逆势风险大"）<br>
+    • 看到这条提示就老老实实空仓，不要逆势操作<br>
+    • <code>-v</code> 看详细的大盘判定过程
+  </div>
+  <p><b>等大盘企稳后（站上 MA20 + 当日反弹）再操作</b>：</p>
+  <div class="formula">
+python main.py 600550 -p swing -p high_vol -v
+  </div>
+  <div class="analogy">
+    💡 <b>解释</b>：波段大盘过滤（-1.0%）+ 高波动 ATR 止损，捕捉暴跌后的修复行情。
+  </div>
+</div>
+
+<!-- 场景 5: 长线价投 -->
+<div class="card">
+  <h3>💰 场景 5：长线价投（看内在价值，不在乎短期波动）</h3>
+  <p><b>特征</b>：看好某只股票的长期价值，不在乎短期大盘波动。这时候要：</p>
+  <ul style="margin: 10px 0 10px 22px; color: #374151;">
+    <li>关闭大盘过滤（大盘跌了反而便宜）</li>
+    <li>用 swing（结构派）止损，跟着前 20 日低点</li>
+    <li>盈亏比正常要求（2.0）</li>
+    <li>正常仓位（长线不用过度轻仓）</li>
+  </ul>
+  <p><b>推荐命令</b>：</p>
+  <div class="formula">
+python main.py 600550 -p long_term --show-config
+  </div>
+  <div class="analogy">
+    💡 <b>解释</b>：<br>
+    • <code>-p long_term</code>：关闭大盘过滤（<code>ENABLE_MARKET_FILTER = False</code>）<br>
+    • 其他参数沿用 default（swing 止损 + 2.0 盈亏比）<br>
+    • 大盘反而成为加仓机会
+  </div>
+  <p><b>若想用更大的资金做长线</b>：</p>
+  <div class="formula">
+python main.py 600550 -p long_term -o TOTAL_CAPITAL=1000000 -o MAX_RISK_PER_TRADE=0.02
+  </div>
+</div>
+
+<!-- 速查表 -->
+<div class="divider"></div>
+<h2>📋 场景速查表</h2>
+<table class="comparison">
+  <tr>
+    <th>市场场景</th>
+    <th>核心策略</th>
+    <th>推荐配置组合</th>
+  </tr>
+  <tr>
+    <td>📊 V 型反弹</td>
+    <td>轻仓试错 + ATR 止损 + 放宽大盘容忍</td>
+    <td><code>-p high_vol -p swing</code></td>
+  </tr>
+  <tr>
+    <td>📈 单边趋势（牛）</td>
+    <td>趋势跟随 + swing 止损 + ATR 止盈</td>
+    <td><code>-p trend -p short_term</code></td>
+  </tr>
+  <tr>
+    <td>📉 单边趋势（熊抄底）</td>
+    <td>极保守 + 关大盘 + 高赔率补偿</td>
+    <td><code>-p conservative -p long_term -o MIN_RR_RATIO=3.0</code></td>
+  </tr>
+  <tr>
+    <td>🌀 震荡市</td>
+    <td>严格筛选 + 双均线确认 + 极轻仓</td>
+    <td><code>-p steady_short -p conservative</code></td>
+  </tr>
+  <tr>
+    <td>📉 市场暴跌</td>
+    <td>空仓观望（过滤器自动拦截）</td>
+    <td><code>-p short_term -v</code>（验证大盘）</td>
+  </tr>
+  <tr>
+    <td>🌊 暴跌后修复</td>
+    <td>波段过滤 + ATR 止损</td>
+    <td><code>-p swing -p high_vol</code></td>
+  </tr>
+  <tr>
+    <td>💰 长线价投</td>
+    <td>关大盘 + swing 止损 + 正常仓位</td>
+    <td><code>-p long_term</code></td>
+  </tr>
+</table>
+
+<div class="analogy">
+  ⚠️ <b>提醒</b>：<br>
+  ① 以上都是"<b>筛查</b>"工具，不是"<b>预测</b>"工具——它告诉你"现在值不值得认真考虑"，而不是"明天一定涨"。<br>
+  ② 命令行中的 <code>[]</code> 在 zsh 终端下需要加引号（如 <code>'[5,10]'</code>），bash 不需要。<br>
+  ③ 不确定参数是否生效？加 <code>--show-config</code> 看每字段的来源标签。
+</div>
+
+<div class="footer">
+  本文档配合 calc_indicators/main.py 使用<br>
+  数据仅供学习参考，不构成任何投资建议
+</div>
+
+</body>
+</html>

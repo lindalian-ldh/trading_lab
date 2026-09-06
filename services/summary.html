@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trading Lab Services 总览</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --card:#ffffff; --ink:#1f2329; --sub:#6b7280;
+    --line:#e5e7eb; --accent:#2563eb; --accent2:#0ea5e9;
+    --green:#16a34a; --amber:#d97706; --red:#dc2626; --purple:#7c3aed;
+    --code-bg:#0f172a; --code-ink:#e2e8f0;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; padding:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.7; font-size:15px;
+  }
+  .wrap{max-width:1080px; margin:0 auto; padding:40px 24px 80px;}
+  header{padding:32px 0 24px; border-bottom:2px solid var(--accent); margin-bottom:32px;}
+  h1{margin:0 0 8px; font-size:30px; letter-spacing:.5px;}
+  .subtitle{color:var(--sub); margin:0; font-size:15px;}
+  h2{
+    font-size:22px; margin:48px 0 16px; padding-bottom:8px;
+    border-bottom:1px solid var(--line);
+    display:flex; align-items:center; gap:10px;
+  }
+  h2 .num{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:30px; height:30px; background:var(--accent); color:#fff;
+    border-radius:8px; font-size:16px; font-weight:700;
+  }
+  h3{font-size:17px; margin:24px 0 10px; color:var(--accent);}
+  p{margin:8px 0;}
+  .lead{color:var(--sub); font-size:14px; margin-top:6px;}
+
+  /* 服务卡片 */
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:16px;}
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:18px 18px 16px; transition:box-shadow .2s, transform .2s;
+  }
+  .card:hover{box-shadow:0 8px 24px rgba(15,23,42,.08); transform:translateY(-2px);}
+  .card .tag{
+    display:inline-block; font-size:11px; padding:2px 8px; border-radius:4px;
+    color:#fff; margin-bottom:8px; font-weight:600; letter-spacing:.5px;
+  }
+  .tag.macro{background:var(--purple);}
+  .tag.market{background:var(--red);}
+  .tag.sector{background:var(--amber);}
+  .tag.stock{background:var(--green);}
+  .tag.misc{background:var(--accent2);}
+  .card h3{margin:6px 0 8px; font-size:16px;}
+  .card .name{color:var(--sub); font-size:12px; font-family:ui-monospace,monospace; margin-bottom:8px;}
+  .card p{font-size:13.5px; color:#374151; margin:6px 0;}
+  .card .key{font-size:12px; color:var(--sub); margin-top:10px; padding-top:10px; border-top:1px dashed var(--line);}
+  .card .key b{color:var(--ink);}
+
+  /* 表格 */
+  table{width:100%; border-collapse:collapse; background:var(--card); border-radius:10px; overflow:hidden; box-shadow:0 1px 3px rgba(15,23,42,.04); font-size:13.5px;}
+  th{background:#1e293b; color:#fff; text-align:left; padding:10px 12px; font-weight:600; white-space:nowrap;}
+  td{padding:10px 12px; border-top:1px solid var(--line); vertical-align:top;}
+  tr:nth-child(even) td{background:#f9fafb;}
+  tr:hover td{background:#eff6ff;}
+  .center{text-align:center;}
+
+  /* 代码块 */
+  pre{
+    background:var(--code-bg); color:var(--code-ink); padding:14px 16px;
+    border-radius:8px; overflow-x:auto; font-size:13px; line-height:1.6;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    margin:12px 0;
+  }
+  code.inline{
+    background:#eef2ff; color:#3730a3; padding:1px 6px; border-radius:4px;
+    font-family:ui-monospace,monospace; font-size:12.5px;
+  }
+  .cmd{color:#86efac;}     /* 命令高亮 */
+  .flag{color:#fcd34d;}    /* 参数高亮 */
+  .cmt{color:#94a3b8; font-style:italic;} /* 注释 */
+
+  /* 流程图 */
+  .flow{display:flex; flex-direction:column; gap:0; margin:16px 0;}
+  .flow-layer{
+    background:var(--card); border:1px solid var(--line); border-left:4px solid var(--accent);
+    border-radius:8px; padding:14px 18px; position:relative;
+  }
+  .flow-layer.l1{border-left-color:var(--purple);}
+  .flow-layer.l2{border-left-color:var(--red);}
+  .flow-layer.l3{border-left-color:var(--amber);}
+  .flow-layer.l4{border-left-color:var(--green);}
+  .flow-layer .layer-title{font-weight:700; font-size:15px; display:flex; align-items:center; gap:8px; margin-bottom:6px;}
+  .flow-layer .layer-title .step{
+    background:var(--ink); color:#fff; font-size:11px; padding:2px 8px; border-radius:10px;
+  }
+  .flow-layer.l1 .layer-title .step{background:var(--purple);}
+  .flow-layer.l2 .layer-title .step{background:var(--red);}
+  .flow-layer.l3 .layer-title .step{background:var(--amber);}
+  .flow-layer.l4 .layer-title .step{background:var(--green);}
+  .flow-layer .layer-desc{color:var(--sub); font-size:13px; margin-bottom:8px;}
+
+  /* 提示框 */
+  .note{
+    background:#fffbeb; border:1px solid #fde68a; border-left:4px solid var(--amber);
+    padding:12px 16px; border-radius:8px; margin:14px 0; font-size:13.5px;
+  }
+  .note.blue{background:#eff6ff; border-color:#bfdbfe; border-left-color:var(--accent);}
+  .note.red{background:#fef2f2; border-color:#fecaca; border-left-color:var(--red);}
+
+  /* 改进项 */
+  .improve-list{list-style:none; padding:0; margin:16px 0;}
+  .improve-list li{
+    background:var(--card); border:1px solid var(--line); border-radius:8px;
+    padding:14px 16px; margin-bottom:10px;
+  }
+  .improve-list li .h{font-weight:600; color:var(--ink); margin-bottom:4px; display:flex; gap:8px; align-items:center;}
+  .improve-list li .h .badge{font-size:11px; padding:2px 8px; border-radius:4px; color:#fff; font-weight:600;}
+  .badge.lim{background:var(--red);}
+  .badge.evo{background:var(--green);}
+  .badge.human{background:var(--accent);}
+
+  footer{margin-top:48px; padding-top:20px; border-top:1px solid var(--line); color:var(--sub); font-size:12px; text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Trading Lab Services 总览</h1>
+  <p class="subtitle">个人 A 股量化辅助决策服务集合 · 宏观 / 大盘 / 板块 / 个股 四层复盘工具链</p>
+  <p class="lead">所有命令在 <code class="inline">trading_lab</code> 目录下执行，首次使用先 <code class="inline">uv sync</code> 安装依赖。各服务遵循「argparse CLI + 跑完即退」批处理模式。</p>
+</header>
+
+<!-- ============ 第一部分 ============ -->
+<h2><span class="num">1</span>各服务目的与功能</h2>
+<p class="lead">共 9 个独立服务，按分析层级分为五大类：宏观、大盘、板块、个股、辅助工具。</p>
+
+<div class="grid">
+
+  <div class="card">
+    <span class="tag macro">宏观层</span>
+    <div class="name">macro-data-service</div>
+    <h3>宏观数据采集</h3>
+    <p>从 akshare 与 FRED 抓取中国 / 美国 / 商品的 CPI、PPI、GDP、M2、LPR、失业率、国债收益率、贵金属等指标，标准化为统一 JSON 模型后写入 SQLite 或 Parquet。增量去重 + 300 秒超时保护，单指标失败不阻断批量。</p>
+    <div class="key"><b>存储：</b>data/trading.db · macro_data / macro_us_data 表</div>
+  </div>
+
+  <div class="card">
+    <span class="tag macro">宏观层</span>
+    <div class="name">macro-charts</div>
+    <h3>宏观指标可视化</h3>
+    <p>与采集模块解耦，仅依赖数据表。数据驱动读取指标名称 / 单位，Plotly 多 Y 轴折线图，最多 3 指标 3 轴对比。输出 JSON（终端）或自包含 HTML，Viridis 色盲友好色板。</p>
+    <div class="key"><b>输出：</b>data/reports/charts/{indicator}.html</div>
+  </div>
+
+  <div class="card">
+    <span class="tag market">大盘层</span>
+    <div class="name">alarming_monitor</div>
+    <h3>大盘预警 + 板块轮动</h3>
+    <p>整合三大核心：5 大原子风险信号（S1 成交额 / S2 放量不涨 / S3 涨跌家数 / S4 高股息逆势 / S5 成长破位）+ ADX 市场状态动态阈值 + RRG 板块轮动四象限与 5 维评分卡。参考日数据驱动自动选今日 / 昨日，输出 Markdown 全景报告与 CSV 历史。</p>
+    <div class="key"><b>扩展：</b>连板龙头（linkban）+ 两融杠杆（margin）子模块</div>
+  </div>
+
+  <div class="card">
+    <span class="tag sector">板块层</span>
+    <div class="name">bankuai-service</div>
+    <h3>板块扫描与龙头梯队</h3>
+    <p>基于 zzshare 接口扫描 A 股板块热度排名（概念 / 题材 / 行业），对热门与冷门板块识别三级龙头梯队：领涨龙 / 中军 / 补涨潜力。纯信号系统，单板块失败不影响整体，30 次/分钟限频自动退避。</p>
+    <div class="key"><b>输出：</b>data/reports/bankuai/bankuai_{date}_{plate}.json</div>
+  </div>
+
+  <div class="card">
+    <span class="tag stock">个股层</span>
+    <div class="name">calc_indicators</div>
+    <h3>开仓三维度筛查</h3>
+    <p>输入股票代码，从结构（回踩均线）、动量（MACD/RSI/大盘过滤）、赔率（盈亏比/止损止盈）三维度判断是否值得开仓。10 个配置档可叠加，支持单字段 override，生成 K线+MACD+RSI+止损止盈 PNG 报告，含两只股票对比模式。</p>
+    <div class="key"><b>输出：</b>data/reports/report_{symbol}_{date}.png</div>
+  </div>
+
+  <div class="card">
+    <span class="tag stock">个股层</span>
+    <div class="name">yanbao-info</div>
+    <h3>券商研报摘要</h3>
+    <p>输入股票代码，自动获取最近券商研报，下载 PDF 并用 pdfplumber 解析，通过关键词+正则提取评级 / 目标价 / 盈利预测 / 催化剂 / 风险，结合一致预期与当前股价产出短线博弈信号判断，输出 JSON + Markdown 摘要。</p>
+    <div class="key"><b>缓存：</b>data/yanbao/{pdfs,cache,history,reports}/</div>
+  </div>
+
+  <div class="card">
+    <span class="tag stock">个股层</span>
+    <div class="name">sell_monitor</div>
+    <h3>动态止盈止损监控</h3>
+    <p>克服「处置效应」，将卖出完全机械化。三层卖出机制：硬止损（保命线）/ 动态移动止盈（阶梯抬升网格分批）/ 时间止损（效率线）。进场即锁定所有规则，每日收盘后输出 hold / sell_partial / sell_all 信号，支持三档配置。</p>
+    <div class="key"><b>存储：</b>data/trading.db · positions 表 + CSV 日志</div>
+  </div>
+
+  <div class="card">
+    <span class="tag misc">辅助工具</span>
+    <div class="name">crawler_news</div>
+    <h3>财经新闻采集</h3>
+    <p>抓取 5 个 AkShare 财经接口（财联社 / 新浪 / 巨潮 / 东财泛 / 东财个股），自动标注股票代码，落盘 JSON Lines，按日期范围生成 Markdown / HTML 简报，含国内外区域分布与被提及最多的股票 Top5。</p>
+    <div class="key"><b>输出：</b>data/reports/news/{YYYY-MM}/</div>
+  </div>
+
+  <div class="card">
+    <span class="tag misc">辅助工具</span>
+    <div class="name">generate_report</div>
+    <h3>每日复盘报告</h3>
+    <p>基于 Jinja2 模板渲染单只标的的复盘摘要：最新收盘 / MA5 / MA20 / RSI14 / MACD + AI 评分。读取已计算指标的 K 线，输出纯文本报告。轻量级工具，可纳入 run_all.py 流水线。</p>
+    <div class="key"><b>输出：</b>data/reports/report_{date}.txt</div>
+  </div>
+
+</div>
+
+<!-- ============ 第二部分 ============ -->
+<h2><span class="num">2</span>四层完整复盘流程</h2>
+<p class="lead">从宏观到个股，依次调用以下命令可完成一个完整的盘后复盘。建议收盘后 17:30 执行（数据已更新）。</p>
+
+<div class="flow">
+
+  <div class="flow-layer l1">
+    <div class="layer-title"><span class="step">第 1 层</span>宏观背景判断</div>
+    <div class="layer-desc">判断当前国内外宏观环境（通胀 / 流动性 / 利率 / 周期），为仓位基调定方向。</div>
+<pre><span class="cmt"># 1.1 抓取中国核心宏观指标最近 36 期</span>
+<span class="cmd">uv run services/macro-data-service/main.py</span> <span class="flag">--indicator</span> cpi_cn,ppi_cn,m2_cn <span class="flag">--recent</span> 36
+
+<span class="cmt"># 1.2 抓取美国 10Y 国债 + 黄金 + 美元指数</span>
+<span class="cmd">uv run services/macro-data-service/main.py</span> <span class="flag">--indicator</span> fred_dgs10,sge_gold,fred_dtwexbgs <span class="flag">--recent</span> 60
+
+<span class="cmt"># 1.3 生成可视化对比图（CPI vs PPI 双轴 / 美债+黄金+美元三轴）</span>
+<span class="cmd">uv run services/macro-charts/main.py</span> <span class="flag">--indicator</span> CPI,PPI <span class="flag">--output</span> html
+<span class="cmd">uv run services/macro-charts/main.py</span> <span class="flag">--table</span> macro_us_data <span class="flag">--indicator</span> DGS10,GOLD,DTWEXBGS <span class="flag">--output</span> html</pre>
+  </div>
+
+  <div class="flow-layer l2">
+    <div class="layer-title"><span class="step">第 2 层</span>大盘温度与风险预警</div>
+    <div class="layer-desc">看市场整体风险水位：成交额 / 放量 / 涨跌家数 / 风格切换 + ADX 趋势强度，决定是否降仓。</div>
+<pre><span class="cmt"># 2.1 全流程：5 大预警信号 + ADX 动态阈值 + 板块轮动 + 连板 + 两融</span>
+<span class="cmd">uv run services/alarming_monitor/main.py</span>
+
+<span class="cmt"># 2.2 查看近 3 个月预警红灯历史（判断是否处于连续预警期）</span>
+<span class="cmd">uv run services/alarming_monitor/main.py</span> <span class="flag">--history</span>
+
+<span class="cmt"># 2.3 极端行情下切保守档提前预警</span>
+<span class="cmd">uv run services/alarming_monitor/main.py</span> <span class="flag">--profile</span> conservative</pre>
+  </div>
+
+  <div class="flow-layer l3">
+    <div class="layer-title"><span class="step">第 3 层</span>板块轮动与龙头识别</div>
+    <div class="layer-desc">从板块层面找主线：RRG 四象限看谁在领涨 / 退潮，三级梯队锁定龙头股，连板看情绪。</div>
+<pre><span class="cmt"># 3.1 仅看板块轮动全景（RRG 四象限 + 5 维评分 + 排名变化）</span>
+<span class="cmd">uv run services/alarming_monitor/main.py</span> <span class="flag">--rotation-only</span>
+
+<span class="cmt"># 3.2 扫描行业板块 Top10/Bottom10 + 三级龙头梯队</span>
+<span class="cmd">uv run services/bankuai-service/main.py</span> <span class="flag">--plate-type</span> 行业
+
+<span class="cmt"># 3.3 看连板龙头与市场温度（晋级率 / 封单金额 / 梯队分布）</span>
+<span class="cmd">uv run services/alarming_monitor/main.py</span> <span class="flag">--linkban-only</span>
+
+<span class="cmt"># 3.4 脚本一键：板块龙头扫描 + 可视化图</span>
+./scripts/scan_leaders_chart.sh <span class="flag">-p</span> aggressive_short --open</pre>
+  </div>
+
+  <div class="flow-layer l4">
+    <div class="layer-title"><span class="step">第 4 层</span>个股开仓 / 持仓 / 卖出</div>
+    <div class="layer-desc">从板块龙头池中选标的，做开仓前筛查 + 研报参考 + 新闻跟踪，进场后用 sell_monitor 接管卖出。</div>
+<pre><span class="cmt"># 4.1 个股开仓三维度筛查（生成 PNG 报告并打开）</span>
+<span class="cmd">uv run python services/calc_indicators/main.py</span> 600550 <span class="flag">-p</span> aggressive_short <span class="flag">-r</span> --open
+
+<span class="cmt"># 4.2 获取该股券商研报摘要与短线信号</span>
+<span class="cmd">uv run services/yanbao-info/main.py</span> <span class="flag">--symbol</span> 600550
+
+<span class="cmt"># 4.3 跟踪该股相关新闻</span>
+<span class="cmd">uv run python services/crawler_news/main.py</span> crawl <span class="flag">--symbol</span> 600550
+<span class="cmd">uv run python services/crawler_news/main.py</span> report <span class="flag">--start-date</span> 2026-08-01 <span class="flag">--end-date</span> 2026-08-31 <span class="flag">--symbol</span> 600550 <span class="flag">--format</span> html
+
+<span class="cmt"># 4.4 开仓即登记持仓（锁定所有卖出规则）</span>
+<span class="cmd">uv run services/sell_monitor/main.py</span> <span class="flag">--symbol</span> 600550 <span class="flag">--date</span> 2026-08-31 \
+    <span class="flag">--init</span> <span class="flag">--entry-price</span> 10.00 <span class="flag">--shares</span> 1000
+
+<span class="cmt"># 4.5 每日收盘后监控卖出信号</span>
+<span class="cmd">uv run services/sell_monitor/main.py</span> <span class="flag">--symbol</span> 600550 <span class="flag">--date</span> 2026-08-31</pre>
+  </div>
+
+</div>
+
+<div class="note blue">
+  <b>参考日规则：</b>alarming_monitor / sell_monitor / bankuai-service 默认数据驱动选今日 / 昨日。早上运行不带 <code class="inline">--date</code>（取昨日），晚上运行加 <code class="inline">--date 今日</code>。
+</div>
+
+<!-- ============ 第三部分 ============ -->
+<h2><span class="num">3</span>常用场景速查表</h2>
+
+<h3>日常盘后复盘</h3>
+<table>
+  <thead><tr><th>步骤</th><th>命令</th><th>产出</th></tr></thead>
+  <tbody>
+    <tr><td>1. 大盘全景</td><td><code class="inline">uv run services/alarming_monitor/main.py</code></td><td>Markdown 全景报告 + CSV 历史</td></tr>
+    <tr><td>2. 板块龙头</td><td><code class="inline">./scripts/scan_leaders_chart.sh</code></td><td>板块龙头图 + JSON</td></tr>
+    <tr><td>3. 持仓监控</td><td><code class="inline">uv run services/sell_monitor/main.py --list</code></td><td>所有未关闭持仓状态</td></tr>
+    <tr><td>4. 新闻简报</td><td><code class="inline">uv run python services/crawler_news/main.py crawl</code></td><td>昨日全量新闻 JSONL</td></tr>
+  </tbody>
+</table>
+
+<h3>开仓前决策</h3>
+<table>
+  <thead><tr><th>场景</th><th>命令</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>超短线筛查</td><td><code class="inline">uv run python services/calc_indicators/main.py 603330 -p ultra_short -r --open</code></td><td>紧止损 + 10日高压止盈</td></tr>
+    <tr><td>激进短线踩 MA5</td><td><code class="inline">uv run python services/calc_indicators/main.py 000837 -p aggressive_short -r -v</code></td><td>0.3% 极严偏离</td></tr>
+    <tr><td>两只股票 PK</td><td><code class="inline">uv run python services/calc_indicators/main.py 600550 -c 000001 -p aggressive_short -r</code></td><td>维度通过数优先判定</td></tr>
+    <tr><td>看研报</td><td><code class="inline">uv run services/yanbao-info/main.py --symbol 000721</code></td><td>评级/目标价/短线信号</td></tr>
+    <tr><td>关闭大盘过滤（长线）</td><td><code class="inline">uv run python services/calc_indicators/main.py 600550 -p aggressive_short -p long_term</code></td><td>多 profile 叠加</td></tr>
+  </tbody>
+</table>
+
+<h3>板块与轮动</h3>
+<table>
+  <thead><tr><th>场景</th><th>命令</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>仅看轮动象限</td><td><code class="inline">uv run services/alarming_monitor/main.py --rotation-only --no-csv --no-report</code></td><td>不写文件，仅打印</td></tr>
+    <tr><td>行业板块前 5</td><td><code class="inline">./scripts/scan_leaders_chart.sh --top-n 5 --plate-type 行业</code></td><td>行业板块 Top5 龙头</td></tr>
+    <tr><td>指定板块选股</td><td><code class="inline">./scripts/scan_leaders_chart.sh --sectors 电力</code></td><td>电力板块龙头</td></tr>
+    <tr><td>连板情绪</td><td><code class="inline">uv run services/alarming_monitor/main.py --linkban-only</code></td><td>连板龙头 + 晋级率</td></tr>
+    <tr><td>两融杠杆</td><td><code class="inline">uv run services/alarming_monitor/main.py --indicator margin --no-rotation --no-linkban</code></td><td>仅 S6 两融数据</td></tr>
+    <tr><td>跳过两融（慢接口）</td><td><code class="inline">uv run services/alarming_monitor/main.py --no-margin</code></td><td>S1~S5 + 轮动 + 连板</td></tr>
+  </tbody>
+</table>
+
+<h3>持仓管理</h3>
+<table>
+  <thead><tr><th>场景</th><th>命令</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>登记新持仓</td><td><code class="inline">uv run services/sell_monitor/main.py --symbol 600550 --date 2026-08-12 --init --entry-price 10.00 --shares 1000</code></td><td>开仓即锁定规则</td></tr>
+    <tr><td>趋势型持仓</td><td><code class="inline">uv run services/sell_monitor/main.py --symbol 600550 --init --entry-price 10.00 --shares 1000 --profile trend</code></td><td>宽止损大网格长持仓</td></tr>
+    <tr><td>每日监控</td><td><code class="inline">uv run services/sell_monitor/main.py --symbol 600550 --date 2026-08-12</code></td><td>输出 hold/sell 信号</td></tr>
+    <tr><td>列出所有持仓</td><td><code class="inline">uv run services/sell_monitor/main.py --list</code></td><td>未关闭持仓一览</td></tr>
+    <tr><td>手动平仓</td><td><code class="inline">uv run services/sell_monitor/main.py --symbol 600550 --close</code></td><td>强制关闭</td></tr>
+  </tbody>
+</table>
+
+<h3>宏观数据维护</h3>
+<table>
+  <thead><tr><th>场景</th><th>命令</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>每日增量抓取</td><td><code class="inline">uv run services/macro-data-service/main.py</code></td><td>所有启用指标最近 1 条</td></tr>
+    <tr><td>首次全量初始化</td><td><code class="inline">uv run services/macro-data-service/main.py --reset --recent 0</code></td><td>清空后拉全部历史</td></tr>
+    <tr><td>修正某指标</td><td><code class="inline">uv run services/macro-data-service/main.py --indicator cpi_cn --recent 60 --mode overwrite</code></td><td>覆盖最近 5 年</td></tr>
+    <tr><td>画宏观图</td><td><code class="inline">./scripts/refresh_macro_charts.sh</code></td><td>宏观 dashboard 一键刷新</td></tr>
+    <tr><td>查询可用指标</td><td><code class="inline">sqlite3 data/trading.db "SELECT DISTINCT indicator,country FROM macro_data UNION SELECT DISTINCT indicator,country FROM macro_us_data;"</code></td><td>数据库直查</td></tr>
+  </tbody>
+</table>
+
+<h3>极端行情应对</h3>
+<table>
+  <thead><tr><th>场景</th><th>命令</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>提前预警</td><td><code class="inline">uv run services/alarming_monitor/main.py --profile conservative</code></td><td>红灯阈值降至 3，成长 -3% 即破位</td></tr>
+    <tr><td>仅看极端信号</td><td><code class="inline">uv run services/alarming_monitor/main.py --profile strict</code></td><td>仅极端信号警报</td></tr>
+    <tr><td>回测某日</td><td><code class="inline">uv run services/alarming_monitor/main.py --date 2026-08-15</code></td><td>指定参考日复盘</td></tr>
+    <tr><td>禁用 ADX 退化静态</td><td><code class="inline">uv run services/alarming_monitor/main.py --no-adx</code></td><td>ADX 数据异常时用</td></tr>
+    <tr><td>强制禁缓存重拉</td><td><code class="inline">NO_CACHE=1 uv run services/alarming_monitor/main.py</code></td><td>调试数据源</td></tr>
+  </tbody>
+</table>
+
+<h3>测试与调试</h3>
+<table>
+  <thead><tr><th>服务</th><th>命令</th><th>用例数</th></tr></thead>
+  <tbody>
+    <tr><td>alarming_monitor</td><td><code class="inline">uv run pytest services/alarming_monitor/test_monitor.py -v</code></td><td class="center">87</td></tr>
+    <tr><td>bankuai-service</td><td><code class="inline">uv run pytest services/bankuai-service/test_bankuai.py -v</code></td><td class="center">31</td></tr>
+    <tr><td>sell_monitor</td><td><code class="inline">uv run pytest services/sell_monitor/test_monitor.py -v</code></td><td class="center">18</td></tr>
+    <tr><td>crawler_news</td><td><code class="inline">uv run pytest services/crawler_news/ -v</code></td><td class="center">301</td></tr>
+    <tr><td>yanbao-info</td><td><code class="inline">uv run pytest services/yanbao-info/test_yanbao.py -v</code></td><td class="center">—</td></tr>
+  </tbody>
+</table>
+
+<!-- ============ 第四部分 ============ -->
+<h2><span class="num">4</span>改进方向、局限与人工参与</h2>
+
+<ul class="improve-list">
+
+  <li>
+    <div class="h"><span class="badge lim">局限</span>数据源稳定性受限</div>
+    <p>全部依赖免费接口（akshare / zzshare / 腾讯 / 新浪 / legu / FRED），无付费 API 兜底。已知问题：akshare <code class="inline">stock_news_em</code> 存在 <code class="inline">\u</code> 转义 bug 触发 ArrowInvalid；东财历史接口已移除改用腾讯主源；zzshare 免费版限 30 次/分钟。建议：对接一个付费数据源（如 Tushare Pro / Wind）作为高级兜底，或自建行情落库服务。</p>
+  </li>
+
+  <li>
+    <div class="h"><span class="badge lim">局限</span>批处理非实时</div>
+    <p>所有服务「跑完即退」，无驻留进程。盘中无法实时推送卖出信号，只能盘后一次性扫描。sell_monitor 的移动回撤止损在盘中急跌时存在滞后风险。建议：引入轻量级常驻 scheduler（如 APScheduler）做盘中定时巡检，或对接券商 Level-1 行情 WebSocket。</p>
+  </li>
+
+  <li>
+    <div class="h"><span class="badge lim">局限</span>通知渠道单一</div>
+    <p>notifier.py 仅实现 ConsoleNotifier，飞书 / 邮件 / 微信为预留扩展点未落地。预警红灯、卖出信号均只能在终端查看，离开电脑即失效。建议：优先实现 FeishuNotifier（飞书机器人 webhook），与现有 Lark 插件联动，实现盘中关键信号手机推送。</p>
+  </li>
+
+  <li>
+    <div class="h"><span class="badge lim">局限</span>ETF 数据多源拼接</div>
+    <p>alarming_monitor 的 ETF 日线需腾讯主源 + 东财快照补今日 + adata 回退三层拼接，逻辑复杂。腾讯源不含今日数据时需全局 30s 拉取 19 只 ETF 快照，存在单点延迟。建议：统一行情落库到 SQLite，各服务从库读取，解耦数据获取与计算。</p>
+  </li>
+
+  <li>
+    <div class="h"><span class="badge lim">局限</span>研报解析依赖正则</div>
+    <p>yanbao-info 用关键词+正则提取评级 / 目标价，研报格式不统一时漏提率高。不同券商 PDF 排版差异大，表格提取依赖 pdfplumber 对版式敏感。建议：引入 LLM 抽取（结构化输出），或对接券商官方结构化研报 API。</p>
+  </li>
+
+  <li>
+    <div class="h"><span class="badge human">人工参与</span>买卖决策最终需人确认</div>
+    <p>系统是<b>纯信号系统</b>，不直接下单。calc_indicators 给出开仓建议股数，sell_monitor 给出 sell_partial/sell_all，均需交易员手动执行。这是设计意图（防黑天鹅、防程序 bug），但意味着人必须盯终端。建议：对接券商 API（如 QMT/Ptrade）实现半自动（信号 → 一键确认 → 下单）。</p>
+  </li>
+
+  <li>
+    <div class="h"><span class="badge human">人工参与</span>配置档需根据市场状态切换</div>
+    <p>alarming_monitor 有 default/conservative/strict 三档，calc_indicators 有 10 档，sell_monitor 有 3 档，均需人工判断市场状态后手动 <code class="inline">--profile</code> 切换。系统不会自动识别「现在是震荡市」并切换。建议：基于 ADX / 波动率自动推荐配置档，或接入 alarming_monitor 的市场状态输出驱动下游配置。</p>
+  </li>
+
+  <li>
+    <div class="h"><span class="badge human">人工参与</span>板块轮动 5 维评分需主观解读</div>
+    <p>5 维评分卡给出「持有/加仓」「关注建仓」「回避」三档操作参考，但「回避」≠ 一定会跌，只是相对沪深300没有超额收益。是否真的回避、何时建仓、仓位多少，需结合宏观周期、政策面、个人风险偏好综合判断。系统提供的是中期筛选，不是短线择时。</p>
+  </li>
+
+  <li>
+    <div class="h"><span class="badge evo">进化</span>跨服务数据闭环未打通</div>
+    <p>bankuai-service 扫出的龙头股 → calc_indicators 筛查 → yanbao-info 看研报 → sell_monitor 接管，这条链路目前需手动串接。stock_mapping.json 仅最小种子。建议：实现 run_all.py 的复盘流水线编排，自动把龙头池喂给 calc_indicators 批量筛查，结果沉淀回 stock_mapping。</p>
+  </li>
+
+  <li>
+    <div class="h"><span class="badge evo">进化</span>AI 评分待增强</div>
+    <p>generate_report 的 AI 评分当前为 Mock=0.5，AIClient.analyze 未真正接入大模型。crawler_news 的事件演化跟踪视图（关键词聚类）未实现。建议：接入真实 LLM 做新闻摘要 + 情绪打分 + 事件演化追踪，与板块轮动信号做相关性分析。</p>
+  </li>
+
+  <li>
+    <div class="h"><span class="badge evo">进化</span>回测与绩效归因缺失</div>
+    <p>系统有历史预警 CSV、卖出信号 CSV，但缺少回测引擎验证策略有效性。无法回答「过去 3 个月按 5 维评分操作的实际收益如何」「保守档 vs default 档谁更优」。建议：新增 backtest 服务，基于历史信号做策略回测 + 绩效归因（夏普 / 最大回撤 / 胜率）。</p>
+  </li>
+
+</ul>
+
+<div class="note">
+  <b>核心定位提醒：</b>这套工具是<b>中期板块相对强弱筛选 + 风险预警 + 机械化卖出</b>的辅助决策系统，不是短线择时神器。它帮你「少犯错、不踩雷、纪律执行」，但「买什么、何时买、买多少」的核心判断仍需人结合宏观周期、政策面、行业景气度主动完成。系统的价值在于把人的精力从盯盘、算指标、纠结卖不卖，解放到「想清楚逻辑、做对决策」上。
+</div>
+
+<footer>
+  Trading Lab Services · 生成于 2026-08-31 · 详细文档见各服务子目录 README.md
+</footer>
+
+</div>
+</body>
+</html>

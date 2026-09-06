@@ -1,0 +1,14 @@
+[project]
+name = "trading-lab-yanbao-info"
+version = "0.1.0"
+description = "券商研报摘要与短线信号提取（akshare + pdfplumber）"
+requires-python = ">=3.11"
+dependencies = [
+    "pdfplumber>=0.10",
+    "akshare>=1.12",
+    "requests>=2.31",
+    "pandas>=2.0",
+]
+
+[tool.uv]
+package = false

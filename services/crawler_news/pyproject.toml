@@ -1,0 +1,20 @@
+[project]
+name = "trading-lab-crawler-news"
+version = "0.1.0"
+description = "工具3：基于 AkShare 的财经新闻采集与报告生成（依赖面文档，运行依赖由根 pyproject.toml 统一安装）"
+requires-python = ">=3.11"
+dependencies = [
+    # 主数据源：AkShare 提供 5 个财经资讯接口（财联社/新浪/巨潮/东方财富×2）
+    "akshare>=1.12",
+    # Playwright 仅在 AkShare 无对应接口时作降级抓取，常规流程不再依赖
+    "playwright>=1.40",
+    # HTML 降级解析（AkShare 失败时的备用解析）
+    "beautifulsoup4>=4.12",
+    # 新闻简报 Markdown → HTML 渲染
+    "markdown>=3.4",
+]
+
+# uv Workspace 虚拟成员约定：package=false，不安装到共享 .venv；
+# 运行时依赖统一在根 pyproject.toml 声明，通过 `uv run` 共享根 venv 执行。
+[tool.uv]
+package = false
