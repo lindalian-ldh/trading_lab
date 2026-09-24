@@ -1,0 +1,14 @@
+[project]
+name = "trading-lab-fupan-report"
+version = "0.1.0"
+description = "招商证券资金流水多维度量化复盘（成本/绩效/择时/仓位/纪律）"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "openpyxl>=3.1",
+    "xlrd>=2.0",
+]
+
+[tool.uv]
+package = false

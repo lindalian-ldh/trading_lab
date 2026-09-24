@@ -39,6 +39,8 @@ dependencies = [
     "ta-lib>=0.7.1",
     # 券商研报 PDF 解析 (yanbao-info) 所需
     "pdfplumber>=0.10",
+    # AI 截图分析 (ai_analysis) 所需
+    "requests>=2.31",
 ]
 
 [build-system]

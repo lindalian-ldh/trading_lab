@@ -1,0 +1,5 @@
+﻿run_time,ref_date,code,name,lhb_count,institutional_buy_count,hot_money_buy_count,hot_money_names,next_day_premium_count,next_day_dump_count,preference,preference_reason,hot_money_score,data_sufficient
+2026-09-08 18:30:32,2026-09-07,000017,深中华A,5,4,0,,3,0,中性,无游资买入,50,True
+2026-09-08 18:55:43,2026-09-07,002579,中京电子,2,2,0,,1,0,中性,无游资买入,25,True
+2026-09-08 18:58:10,2026-09-07,301526,国际复材,2,2,0,,1,1,中性,无游资买入,5,True
+2026-09-08 19:34:23,2026-09-07,601086,国芳集团,3,0,0,,3,0,中性,无游资买入,50,True

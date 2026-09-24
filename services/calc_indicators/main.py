@@ -108,22 +108,15 @@ def fetch_data(symbol: str, config: TradingConfig) -> pd.DataFrame:
     end_date = datetime.now().strftime("%Y-%m-%d")
     start_date = (datetime.now() - timedelta(days=240)).strftime("%Y-%m-%d")
 
-    # —— 尝试 efinance ——
-    def _try_efinance():
-        try:
-            import efinance as ef
-            return ef.stock.get_quote_history(ef_code)
-        except Exception:
-            return None
-
-    df = _suppress_output(_try_efinance)
-    if df is not None and not df.empty:
-        return _normalize_ef(df, config)
-
-    # —— 尝试 baostock ——
+    # —— 数据源 1: baostock（首选：直连 TCP，稳定无代理依赖）——
+    # try/finally 保护 bs.logout()：避免中途异常导致 TCP socket 未关闭
+    # （修复 ResourceWarning: unclosed socket）
+    # 改为首选源：efinance 调 eastmoney 接口在 macOS OpenSSL 3.6+ 环境下
+    # 会被 Microsoft-IIS/10.0 断开（TLS 兼容性问题），永久不可用；
+    # baostock 直连其 TCP 服务器，不受系统 HTTP 代理影响。
     def _try_baostock():
+        import baostock as bs
         try:
-            import baostock as bs
             bs.login()
             rs = bs.query_history_k_data_plus(
                 bs_code,
@@ -136,16 +129,32 @@ def fetch_data(symbol: str, config: TradingConfig) -> pd.DataFrame:
             rows = []
             while rs.next():
                 rows.append(rs.get_row_data())
-            bs.logout()
             if rows:
                 return pd.DataFrame(rows, columns=rs.fields)
         except Exception:
-            pass
+            return None
+        finally:
+            try:
+                bs.logout()
+            except Exception:
+                pass
         return None
 
     df = _suppress_output(_try_baostock)
     if df is not None and not df.empty:
         return _normalize_bs(df, config)
+
+    # —— 数据源 2: efinance（兜底）——
+    def _try_efinance():
+        try:
+            import efinance as ef
+            return ef.stock.get_quote_history(ef_code)
+        except Exception:
+            return None
+
+    df = _suppress_output(_try_efinance)
+    if df is not None and not df.empty:
+        return _normalize_ef(df, config)
 
     print(f"⚠️  无法获取 {symbol} 的行情数据，请检查代码或网络连接")
     sys.exit(1)

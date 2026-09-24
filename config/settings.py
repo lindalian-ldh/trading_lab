@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     # ---- AI 配置 ----
     ai_enabled: bool = False
     ai_api_key: str = ""
-    ai_api_url: str = "https://api.example.com/v1/analyze"
+    ai_api_url: str = "https://api.deepseek.com/v1/chat/completions"
+    ai_model: str = "deepseek-v4-flash-vision-exp"
 
     # ---- 交易所 ----
     exchange: str = "binance"

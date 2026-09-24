@@ -16,14 +16,19 @@ resolution-markers = [
 [manifest]
 members = [
     "trading-lab",
+    "trading-lab-ai-analysis",
     "trading-lab-alarming-monitor",
     "trading-lab-bankuai-service",
+    "trading-lab-barbell-system",
     "trading-lab-calc-indicators",
     "trading-lab-crawler-news",
+    "trading-lab-fupan-report",
     "trading-lab-generate-report",
     "trading-lab-macro-charts",
     "trading-lab-macro-data-service",
     "trading-lab-sell-monitor",
+    "trading-lab-stock-character",
+    "trading-lab-trade-habit",
     "trading-lab-yanbao-info",
 ]
 
@@ -2799,6 +2804,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "ta-lib" },
     { name = "zzshare" },
 ]
@@ -2833,6 +2839,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "requests", specifier = ">=2.31" },
     { name = "ta-lib", specifier = ">=0.7.1" },
     { name = "zzshare" },
 ]
@@ -2843,6 +2850,17 @@ dev = [
     { name = "pytest", specifier = ">=8.0" },
     { name = "ruff", specifier = ">=0.5" },
 ]
+
+[[package]]
+name = "trading-lab-ai-analysis"
+version = "0.1.0"
+source = { virtual = "services/ai_analysis" }
+dependencies = [
+    { name = "requests" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "requests", specifier = ">=2.31" }]
 
 [[package]]
 name = "trading-lab-alarming-monitor"
@@ -2880,6 +2898,11 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.0" },
     { name = "zzshare" },
 ]
+
+[[package]]
+name = "trading-lab-barbell-system"
+version = "0.1.0"
+source = { virtual = "services/barbell_system" }
 
 [[package]]
 name = "trading-lab-calc-indicators"
@@ -2922,6 +2945,26 @@ requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12" },
     { name = "markdown", specifier = ">=3.4" },
     { name = "playwright", specifier = ">=1.40" },
+]
+
+[[package]]
+name = "trading-lab-fupan-report"
+version = "0.1.0"
+source = { virtual = "services/fupan-report" }
+dependencies = [
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "openpyxl" },
+    { name = "pandas" },
+    { name = "xlrd" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "openpyxl", specifier = ">=3.1" },
+    { name = "pandas", specifier = ">=2.0" },
+    { name = "xlrd", specifier = ">=2.0" },
 ]
 
 [[package]]
@@ -2991,6 +3034,33 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", specifier = ">=2.0" },
 ]
+
+[[package]]
+name = "trading-lab-stock-character"
+version = "0.1.0"
+source = { virtual = "services/stock_character" }
+dependencies = [
+    { name = "baostock" },
+    { name = "efinance" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pandas" },
+    { name = "zzshare" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "baostock", specifier = ">=0.8" },
+    { name = "efinance", specifier = ">=0.5" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "pandas", specifier = ">=2.0" },
+    { name = "zzshare" },
+]
+
+[[package]]
+name = "trading-lab-trade-habit"
+version = "0.1.0"
+source = { virtual = "services/trade_habit" }
 
 [[package]]
 name = "trading-lab-yanbao-info"

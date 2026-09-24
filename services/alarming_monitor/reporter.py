@@ -178,9 +178,9 @@ def generate_markdown_report(alarm_result: dict,
     - **亮灯信号**：S2（放量不涨）, S3（涨跌比恶化）, S4（高股息逆势）
 
     #### 🔄 板块轮动全景表
-    | 板块 | 收盘价 | ADX | RS-Ratio | RS-Momentum | 象限标签 | 5维评分 | 操作参考 |
-    |------|--------|-----|----------|-------------|----------|---------|----------|
-    | 银行ETF | 1.052 | 32.1 | 1.12 | +2.3% | 领涨主线 | 4.2 | 持有 |
+    | 板块 | 收盘价 | ADX | RS-Ratio | RS-Momentum | 象限标签 | 5维评分 | 有仓位 | 无仓位 | 超卖 | 反弹 | 趋势健康 | RS健康 | 拐点 | 领先 | 确认 | 持有 |
+    |------|--------|-----|----------|-------------|----------|---------|----------|----------|------|------|----------|--------|------|------|------|------|
+    | 银行ETF | 1.052 | 32.1 | 1.12 | +2.3% | 领涨主线 | 4.2 | 持有 | 可建仓 | 否 | 无 | 4.0 | 3.0 | — | 0 | 80 | 75持有 |
     ...
 
     Args:
@@ -428,8 +428,8 @@ def generate_markdown_report(alarm_result: dict,
     lines.append(f'> {build_rrg_summary(rotation_result)}')
     lines.append('')
     # 表头（严格按用户模板列顺序，不加入排名Δ）
-    lines.append('| 板块 | 收盘价 | ADX | RS-Ratio | RS-Momentum | 象限标签 | 5维评分 | 操作参考 |')
-    lines.append('|------|--------|-----|----------|-------------|----------|---------|----------|')
+    lines.append('| 板块 | 收盘价 | ADX | RS-Ratio | RS-Momentum | 象限标签 | 5维评分 | 有仓位 | 无仓位 | 超卖 | 反弹 | 趋势健康 | RS健康 | 拐点 | 领先 | 确认 | 持有 |')
+    lines.append('|------|--------|-----|----------|-------------|----------|---------|----------|----------|------|------|----------|--------|------|------|------|------|')
     # 行（截取用户模板所需的列，去掉排名Δ 列）
     # build_rotation_table_rows 返回的是 "| 银行ETF | 1.052 | ... | 排名Δ | 操作参考 |" 格式
     # 我们在此手动重写行，以严格匹配用户模板的 8 列（不含排名Δ）
@@ -443,10 +443,28 @@ def generate_markdown_report(alarm_result: dict,
             mom_s = '—'
             quad_s = f'数据不足'
             score_s = '—'
-            action_s = '—'
+            action_with_s = '—'
+            action_without_s = '—'
+            oversold_s = '—'
+            rebound_s = '—'
+            trend_h_s = '—'
+            rs_h_s = '—'
+            improve_s = '—'
+            lead_s = '—'
+            confirm_s = '—'
+            hold_s = '—'
         else:
             close_s = f"{r['close']:.3f}" if r.get('close') is not None else '—'
-            adx_s = f"{r['adx']:.1f}" if r.get('adx') is not None else '—'
+            if r.get('adx') is not None:
+                adx_s = f"{r['adx']:.1f}"
+                # 方向箭头：↑ 上涨趋势 / ↓ 下跌趋势
+                adx_dir = r.get('adx_direction', '')
+                if adx_dir == 'up':
+                    adx_s += '↑'
+                elif adx_dir == 'down':
+                    adx_s += '↓'
+            else:
+                adx_s = '—'
             ratio_s = f"{r['rs_ratio']:.2f}" if r.get('rs_ratio') is not None else '—'
             mom_raw = r.get('rs_momentum')
             if mom_raw is None:
@@ -460,8 +478,49 @@ def generate_markdown_report(alarm_result: dict,
             score_s = f"{s5.get('total_score', '—'):.1f}" if s5.get('total_score') is not None else '—'
             if s5.get('crowding_penalty_applied'):
                 score_s += ' ⚠️'
-            action_s = s5.get('action_hint', '—')
-        lines.append(f'| {label} | {close_s} | {adx_s} | {ratio_s} | {mom_s} | {quad_s} | {score_s} | {action_s} |')
+            # 横截面 z-score 标注（维2标准化生效时显示）
+            if s5.get('mom_acc_cross_sectional'):
+                z = s5.get('mom_acc_zscore')
+                if z is not None:
+                    sign = '+' if z >= 0 else ''
+                    score_s += f' z{sign}{z:.1f}'
+            action_with_s = s5.get('action_with', '—')
+            action_without_s = s5.get('action_without', '—')
+            oversold_s = '是' if s5.get('oversold_flag') else '否'
+            rebound_s = s5.get('rebound_level', '无')
+            oversold_days = s5.get('oversold_days', 0)
+            oversold_expired = s5.get('oversold_expired', False)
+            valid_days = rotation_result.get('oversold_valid_days', 5)
+            # 评分列加反弹级别后缀（含持续天数/有效期）
+            if oversold_expired:
+                # 已失效默认隐藏，展开时显示 [已失效 N/5]
+                score_s += f' [已失效 {oversold_days}/{valid_days}]'
+            elif rebound_s != '无':
+                score_s += f' [{rebound_s} {oversold_days}/{valid_days}]'
+            # 趋势健康 / RS健康 / 拐点预警
+            trend_h = s5.get('trend_health')
+            rs_h = s5.get('rs_health')
+            trend_h_s = f'{trend_h:.1f}' if trend_h is not None else '—'
+            rs_h_s = f'{rs_h:.1f}' if rs_h is not None else '—'
+            improve_s = '改善' if s5.get('improvement_signal') else '—'
+            # 领先预警分（0~100，仅观察名单）
+            lead_sc = s5.get('lead_score')
+            lead_s = f'{lead_sc}' if lead_sc is not None else '—'
+            # 同步确认分（0~100，过滤假反弹）
+            confirm_sc = s5.get('confirm_score')
+            confirm_s = f'{confirm_sc}' if confirm_sc is not None else '—'
+            # 持有分（0~100，加仓/减仓/移动止损，不预测拐点）
+            hold_sc = s5.get('hold_score')
+            hold_state = s5.get('hold_state')
+            if hold_sc is None:
+                hold_s = '—'
+            elif hold_state == 'exit':
+                hold_s = f'{hold_sc}离场'
+            elif hold_state == 'hold':
+                hold_s = f'{hold_sc}持有'
+            else:
+                hold_s = f'{hold_sc}减仓'
+        lines.append(f'| {label} | {close_s} | {adx_s} | {ratio_s} | {mom_s} | {quad_s} | {score_s} | {action_with_s} | {action_without_s} | {oversold_s} | {rebound_s} | {trend_h_s} | {rs_h_s} | {improve_s} | {lead_s} | {confirm_s} | {hold_s} |')
 
     lines.append('')
 

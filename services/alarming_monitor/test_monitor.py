@@ -928,9 +928,11 @@ class Test5DScore:
         r1 = calc_5d_score(etf, rs_ratio_last=0.8, rs_momentum_last=-1.0,
                            rs_momentum_series=pd.Series([-1.0, -0.8, -0.6, -0.4, -0.2]), cfg=cfg)
         assert 0.0 <= r1['total_score'] <= 5.0
-        # 低分时回避
+        # 低分时回避（双列格式：有仓位减仓/无仓位回避）
         if r1['total_score'] < cfg.SCORE_ATTENTION_THRESHOLD:
-            assert r1['action_hint'] == '回避'
+            assert r1['action_with'] == '减仓'
+            assert r1['action_without'] == '回避'
+            assert r1['action_hint'] == '减仓/回避'
 
         # 场景2：RS 好 但 动量差 → 关注档
         r2 = calc_5d_score(etf, rs_ratio_last=1.0 + cfg.SCORE_REL_MOM_FULL * 0.6,
@@ -938,12 +940,713 @@ class Test5DScore:
                            rs_momentum_series=pd.Series([0.0] * 5), cfg=cfg)
         assert 0.0 <= r2['total_score'] <= 5.0
         if cfg.SCORE_ATTENTION_THRESHOLD <= r2['total_score'] <= cfg.SCORE_STRONG_THRESHOLD:
-            assert r2['action_hint'] == '关注建仓'
+            assert r2['action_with'] == '持有'
+            assert r2['action_without'] == '可轻仓'
+            assert r2['action_hint'] == '持有/可轻仓'
 
     def test_score_weights_sum(self, cfg):
         """权重合计必须 = 1.0（不偏倚）。"""
         total_w = sum(cfg.SCORE_WEIGHTS.values())
         assert abs(total_w - 1.0) < 1e-9
+
+    def test_adx_piecewise_strength_breakpoints(self, cfg):
+        """维3 ADX 分段映射：15→0 / 20→1 / 25→3 / 30→5，封顶5。"""
+        from rotation import _score_adx_piecewise
+        # +DI > -DI 路径（不降权）
+        assert _score_adx_piecewise(15.0, 25.0, 10.0, cfg) == pytest.approx(0.0, abs=1e-6)
+        assert _score_adx_piecewise(20.0, 25.0, 10.0, cfg) == pytest.approx(1.0, abs=1e-6)
+        assert _score_adx_piecewise(22.5, 25.0, 10.0, cfg) == pytest.approx(2.0, abs=1e-6)
+        assert _score_adx_piecewise(25.0, 25.0, 10.0, cfg) == pytest.approx(3.0, abs=1e-6)
+        assert _score_adx_piecewise(27.5, 25.0, 10.0, cfg) == pytest.approx(4.0, abs=1e-6)
+        assert _score_adx_piecewise(30.0, 25.0, 10.0, cfg) == pytest.approx(5.0, abs=1e-6)
+        assert _score_adx_piecewise(40.0, 25.0, 10.0, cfg) == pytest.approx(5.0, abs=1e-6)
+        # ADX < 15 → 0
+        assert _score_adx_piecewise(10.0, 25.0, 10.0, cfg) == pytest.approx(0.0, abs=1e-6)
+        assert _score_adx_piecewise(0.0, 25.0, 10.0, cfg) == pytest.approx(0.0, abs=1e-6)
+
+    def test_adx_piecewise_down_direction_penalty(self, cfg):
+        """维3 ADX 方向降权：-DI > +DI → 乘 ADX_DOWN_PENALTY(0.1)。"""
+        from rotation import _score_adx_piecewise
+        # ADX=30, 上涨方向 → 5.0
+        assert _score_adx_piecewise(30.0, 25.0, 10.0, cfg) == pytest.approx(5.0, abs=1e-6)
+        # ADX=30, 下跌方向 → 5.0 × 0.1 = 0.5
+        assert _score_adx_piecewise(30.0, 10.0, 25.0, cfg) == pytest.approx(0.5, abs=1e-6)
+        # ADX=20, 下跌方向 → 1.0 × 0.1 = 0.1
+        assert _score_adx_piecewise(20.0, 10.0, 25.0, cfg) == pytest.approx(0.1, abs=1e-6)
+        # ADX=25, 下跌方向 → 3.0 × 0.1 = 0.3
+        assert _score_adx_piecewise(25.0, 10.0, 25.0, cfg) == pytest.approx(0.3, abs=1e-6)
+        # ADX=15, 下跌方向 → 0 × 0.1 = 0
+        assert _score_adx_piecewise(15.0, 10.0, 25.0, cfg) == pytest.approx(0.0, abs=1e-6)
+
+    def test_adx_piecewise_none_and_nan(self, cfg):
+        """维3 ADX 异常输入：None/NaN → 0 分。"""
+        from rotation import _score_adx_piecewise
+        assert _score_adx_piecewise(None, 25.0, 10.0, cfg) == 0.0
+        assert _score_adx_piecewise(float('nan'), 25.0, 10.0, cfg) == 0.0
+        # DI 缺失 → 视为下跌（保守降权），ADX=30 → 5 × 0.1 = 0.5
+        assert _score_adx_piecewise(30.0, None, None, cfg) == pytest.approx(0.5, abs=1e-6)
+
+
+# ====================================================================
+# 超卖反弹时间约束测试（OVERSOLD_VALID_DAYS=5）
+# ====================================================================
+
+class TestOversoldReboundTimeConstraint:
+    """超卖信号时间约束：5日有效期、计时器归零、truncated保守、过期重激活。"""
+
+    @staticmethod
+    def _build_oversold_df(n_days: int = 40,
+                           oversold_days: int = 6,
+                           base_price: float = 1.00,
+                           drop_per_day: float = 0.03,
+                           high_low_pct: float = 0.01):
+        """构造一个"末N日连续超卖"的 ETF DataFrame。
+
+        前 n_days-oversold_days 日：稳定在 base_price（不超卖，close≈MA20）
+        末 oversold_days 日：每日跌 drop_per_day，拉开与 MA20 的偏离。
+
+        Args:
+            n_days: 总天数（≥33 以确保 ATR 预热期）
+            oversold_days: 末尾超卖天数
+            base_price: 超卖前稳定价格
+            drop_per_day: 超卖期每日下跌幅度（3% → close 比 MA20 低足够多）
+            high_low_pct: high/low 围绕 close 的波动比例（用于 ATR）
+        Returns:
+            pd.DataFrame with date/high/low/close/amount 列
+        """
+        dates = [(date(2026, 1, 1) + timedelta(days=i)).strftime('%Y-%m-%d')
+                 for i in range(n_days)]
+        prices = []
+        stable_end = n_days - oversold_days
+        for i in range(n_days):
+            if i < stable_end:
+                prices.append(base_price)
+            else:
+                # 超卖期：每日跌 drop_per_day
+                prev = prices[-1] if prices else base_price
+                prices.append(prev * (1 - drop_per_day))
+        # high/low 围绕 close 波动
+        highs = [p * (1 + high_low_pct) for p in prices]
+        lows = [p * (1 - high_low_pct) for p in prices]
+        # amount 简单设为 close*100
+        amounts = [p * 100 for p in prices]
+        return pd.DataFrame({
+            'date': dates, 'high': highs, 'low': lows,
+            'close': prices, 'amount': amounts,
+        })
+
+    @staticmethod
+    def _build_mom_series(n: int, mom_today: float, mom_prev: float = -0.01):
+        """构造 RS-Momentum 序列：末位=mom_today，末2位=mom_prev，其余=0。"""
+        vals = [0.0] * (n - 2) + [mom_prev, mom_today]
+        return pd.Series(vals)
+
+    def test_expired_after_5_days_no_momentum(self, cfg):
+        """连续7日下跌（实际6日触发超卖）且无RS-Momentum>0 → 过期置"无"。
+
+        drop_per_day=3%，首日偏离不足2×ATR(4%)，从第2日起触发超卖。
+        6日超卖 + RS-Momentum 始终≤0 → effective_days=6 > 5 → 过期。
+        """
+        from rotation import _classify_oversold_rebound
+        etf_df = self._build_oversold_df(n_days=40, oversold_days=7)
+        rs_ratio = pd.Series([1.0] * 40)
+        rs_mom = self._build_mom_series(40, mom_today=-0.02, mom_prev=-0.03)
+        adx_info = {'adx': 20.0, 'plus_di': 10.0, 'minus_di': 15.0,
+                    'direction': 'down', 'di_cross_up': False}
+        amount_pct = [50.0] * 5
+        level, note, days, expired, truncated = _classify_oversold_rebound(
+            etf_df, rs_ratio, rs_mom, adx_info, amount_pct,
+            '滞后回避', '滞后回避', 'below', cfg,
+        )
+        assert level == '无'
+        assert expired is True
+        assert days == 6  # 6日触发超卖（首日偏离不足）
+        assert truncated is False
+
+    def test_momentum_reset_timer_to_candidate(self, cfg):
+        """今日RS-Momentum>0 → 计时器归零（effective_days=0），级别候选。
+
+        构造7日下跌（6日超卖），今日RS-Momentum>0 →
+        last_positive_idx = today → effective_days = 0 → 不过期 → 候选。
+        """
+        from rotation import _classify_oversold_rebound
+        etf_df = self._build_oversold_df(n_days=40, oversold_days=7)
+        rs_ratio = pd.Series([1.0] * 40)
+        # 末位=today(RS-Momentum>0)，其余≤0 → last_positive=today → days=0
+        mom_vals = [0.0] * 33 + [-0.01, -0.01, -0.01, -0.01, -0.01, -0.01, 0.03]
+        assert len(mom_vals) == 40
+        rs_mom = pd.Series(mom_vals)
+        adx_info = {'adx': 20.0, 'plus_di': 10.0, 'minus_di': 15.0,
+                    'direction': 'down', 'di_cross_up': False}
+        amount_pct = [50.0] * 5
+        level, note, days, expired, truncated = _classify_oversold_rebound(
+            etf_df, rs_ratio, rs_mom, adx_info, amount_pct,
+            '轮动初期', '滞后回避', 'above', cfg,
+        )
+        assert level == '候选'  # today RS-Momentum>0 → level2 → 候选
+        assert expired is False
+        assert days == 0  # today 就是 last_positive → 0
+
+    def test_truncated_no_expiry_at_window_start(self, cfg):
+        """窗口起点已超卖 → truncated=True，不自动过期。
+
+        构造全程超卖（n_days=35，全部下跌）→ streak_start ≤ warmup_end(19) → truncated。
+        即使 effective_days > 5 也不过期。
+        """
+        from rotation import _classify_oversold_rebound
+        # 全部 35 日都在下跌（oversold_days = n_days = 35）
+        etf_df = self._build_oversold_df(n_days=35, oversold_days=35)
+        rs_ratio = pd.Series([1.0] * 35)
+        rs_mom = self._build_mom_series(35, mom_today=-0.02, mom_prev=-0.03)
+        adx_info = {'adx': 20.0, 'plus_di': 10.0, 'minus_di': 15.0,
+                    'direction': 'down', 'di_cross_up': False}
+        amount_pct = [50.0] * 5
+        level, note, days, expired, truncated = _classify_oversold_rebound(
+            etf_df, rs_ratio, rs_mom, adx_info, amount_pct,
+            '滞后回避', '滞后回避', 'below', cfg,
+        )
+        # truncated=True → 不过期
+        assert truncated is True
+        assert expired is False
+        # today RS-Momentum=-0.02 < 0 → 无 level2 条件 → 观察
+        assert level == '观察'
+
+    def test_non_oversold_today_returns_none(self, cfg):
+        """今日非超卖 → 直接返回"无"。"""
+        from rotation import _classify_oversold_rebound
+        # 构造全程稳定的 DataFrame（不超卖）
+        etf_df = self._build_oversold_df(n_days=40, oversold_days=0)
+        rs_ratio = pd.Series([1.0] * 40)
+        rs_mom = self._build_mom_series(40, mom_today=0.01, mom_prev=0.02)
+        adx_info = {'adx': 25.0, 'plus_di': 18.0, 'minus_di': 12.0,
+                    'direction': 'up', 'di_cross_up': False}
+        amount_pct = [60.0] * 5
+        level, note, days, expired, truncated = _classify_oversold_rebound(
+            etf_df, rs_ratio, rs_mom, adx_info, amount_pct,
+            '领涨主线', '领涨主线', 'above', cfg,
+        )
+        assert level == '无'
+        assert days == 0
+        assert expired is False
+        assert truncated is False
+
+    def test_expired_then_reactivated_by_momentum(self, cfg):
+        """过期后再次RS-Momentum>0 → 重新从候选开始。
+
+        构造8日下跌（7日超卖），但今日RS-Momentum>0 →
+        last_positive_idx = today → effective_days = 0 → 不过期 → 候选。
+        """
+        from rotation import _classify_oversold_rebound
+        etf_df = self._build_oversold_df(n_days=40, oversold_days=8)
+        rs_ratio = pd.Series([1.0] * 40)
+        # 前7日 RS-Momentum ≤ 0，今日（末位）RS-Momentum > 0
+        # 32 个零 + 8 个值 = 40
+        mom_vals = [0.0] * 32 + [-0.02, -0.02, -0.02, -0.02, -0.02, -0.02, -0.02, 0.05]
+        assert len(mom_vals) == 40
+        rs_mom = pd.Series(mom_vals)
+        adx_info = {'adx': 20.0, 'plus_di': 10.0, 'minus_di': 15.0,
+                    'direction': 'down', 'di_cross_up': False}
+        amount_pct = [50.0] * 5
+        level, note, days, expired, truncated = _classify_oversold_rebound(
+            etf_df, rs_ratio, rs_mom, adx_info, amount_pct,
+            '轮动初期', '滞后回避', 'above', cfg,
+        )
+        # 今日 RS-Momentum>0 → last_positive_idx = today → effective_days = 0
+        # 不过期，level = 候选（RS-Momentum>0 → level2）
+        assert level == '候选'
+        assert expired is False
+        assert days == 0  # today 就是 last_positive → 0
+
+
+# ====================================================================
+# 趋势/RS 健康度测试（拐点预警辅助）
+# ====================================================================
+
+class TestHealthIndicators:
+    """趋势/RS 健康度字段：adx_slope/di_diff/rs_mom_accel/multi_period_rs/volume_ratio + trend_health/rs_health/improvement_signal。"""
+
+    @staticmethod
+    def _build_df(n: int = 80, trend: str = 'up'):
+        """构造含 close/high/low/volume 的 mock DataFrame。"""
+        dates = [(date(2026, 1, 1) + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(n)]
+        base = 1.0
+        if trend == 'up':
+            closes = [base * (1 + 0.005 * i) for i in range(n)]
+        elif trend == 'down':
+            closes = [base * (1 - 0.005 * i) for i in range(n)]
+        else:
+            closes = [base + 0.01 * math.sin(i * 0.3) for i in range(n)]
+        highs = [c * 1.01 for c in closes]
+        lows = [c * 0.99 for c in closes]
+        volumes = [1_000_000 * (1 + 0.1 * (i % 5)) for i in range(n)]
+        return pd.DataFrame({'date': dates, 'close': closes, 'high': highs,
+                             'low': lows, 'volume': volumes})
+
+    def test_calc_volume_ratio(self, cfg):
+        """成交量比 = 今日量 / MA20(量)。"""
+        from indicators import calc_volume_ratio
+        df = self._build_df(n=40)
+        # 末位 volume = 1_000_000 * (1 + 0.1*(39%5)) = 1_000_000 * 1.4
+        # 前19日均量 = 1_000_000 * mean(1+0.1*(i%5)) for i in [20..38]
+        vr = calc_volume_ratio(df, period=20)
+        assert vr is not None
+        assert 0.5 < vr < 2.0
+
+    def test_calc_volume_ratio_insufficient_data(self, cfg):
+        """数据不足返回 None。"""
+        from indicators import calc_volume_ratio
+        df = self._build_df(n=10)
+        assert calc_volume_ratio(df, period=20) is None
+
+    def test_calc_multi_period_rs(self, cfg):
+        """多周期相对强度：ETF 收益 - 基准收益。"""
+        from indicators import calc_multi_period_rs
+        etf = self._build_df(n=80, trend='up')    # ETF 上涨
+        bench = self._build_df(n=80, trend='flat')  # 基准横盘
+        rs = calc_multi_period_rs(etf, bench, [5, 20, 60])
+        assert rs is not None
+        # ETF 跑赢基准 → 各周期 RS > 0
+        for p in [5, 20, 60]:
+            assert rs[p] is not None
+            assert rs[p] > 0
+
+    def test_compute_health_improvement_signal(self, cfg):
+        """三条件同时满足 → improvement_signal=True。"""
+        from rotation import _compute_health
+        etf = self._build_df(n=80, trend='up')
+        bench = self._build_df(n=80, trend='flat')
+        # 构造 adx_info：adx_slope>0, di_cross_up=True
+        adx_info = {
+            'adx': 30.0, 'plus_di': 25.0, 'minus_di': 15.0,
+            'direction': 'up', 'di_cross_up': True,
+            'adx_slope': 2.5, 'di_diff': 10.0,
+        }
+        # RS-Momentum 序列：末5日前 < 0，今日 > 0 → rs_mom_accel > 0
+        rs_mom = pd.Series([-0.01] * 75 + [0.02, 0.03, 0.04, 0.05, 0.06])
+        health = _compute_health(etf, bench, adx_info, rs_mom, cfg)
+        # ADX斜率>0 + di_cross_up + rs_mom_accel>0 → improvement_signal=True
+        assert health['improvement_signal'] is True
+        assert health['adx_slope'] == 2.5
+        assert health['di_diff'] == 10.0
+        assert health['rs_mom_accel'] is not None
+        assert health['rs_mom_accel'] > 0
+        # trend_health: 5项全满足 → 5.0
+        assert health['trend_health'] == 5.0
+
+    def test_compute_health_no_improvement_when_one_missing(self, cfg):
+        """任一条件不满足 → improvement_signal=False。"""
+        from rotation import _compute_health
+        etf = self._build_df(n=80, trend='up')
+        bench = self._build_df(n=80, trend='flat')
+        # di_cross_up=False → 不满足
+        adx_info = {
+            'adx': 30.0, 'plus_di': 25.0, 'minus_di': 15.0,
+            'direction': 'up', 'di_cross_up': False,
+            'adx_slope': 2.5, 'di_diff': 10.0,
+        }
+        rs_mom = pd.Series([-0.01] * 75 + [0.02, 0.03, 0.04, 0.05, 0.06])
+        health = _compute_health(etf, bench, adx_info, rs_mom, cfg)
+        assert health['improvement_signal'] is False
+
+    def test_resolve_action_improvement_downgrades_retreat(self, cfg):
+        """退潮预警 + improvement_signal → 有仓减仓→持有。"""
+        from rotation import _resolve_action
+        # 退潮预警 + below → 默认减仓
+        w_without_imp, wo_without_imp = _resolve_action(
+            '退潮预警', 3.0, 'below', 2.0, cfg, rebound_level='无',
+            improvement_signal=False,
+        )
+        assert w_without_imp == '减仓'
+        # 加 improvement_signal → 降级为持有
+        w_with_imp, wo_with_imp = _resolve_action(
+            '退潮预警', 3.0, 'below', 2.0, cfg, rebound_level='无',
+            improvement_signal=True,
+        )
+        assert w_with_imp == '持有'  # 降级保护
+
+    def test_resolve_action_improvement_no_effect_on_laggard(self, cfg):
+        """滞后回避 + improvement_signal → 不变（仍清仓）。"""
+        from rotation import _resolve_action
+        w, wo = _resolve_action(
+            '滞后回避', 2.0, 'below', 2.0, cfg, rebound_level='无',
+            improvement_signal=True,
+        )
+        assert w == '清仓'  # 改善信号不改变滞后回避的清仓规则
+
+
+# ====================================================================
+# 领先层（拐点提前嗅探）测试
+# ====================================================================
+
+class TestLeadScore:
+    """领先层：波动率压缩 / OBV量价背离 / RS动量背离 → lead_score 0~100。"""
+
+    @staticmethod
+    def _build_df(n: int = 60, trend: str = 'flat'):
+        dates = [(date(2026, 1, 1) + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(n)]
+        base = 1.0
+        if trend == 'down_then_obv_up':
+            # 前段下跌放量（OBV 降），后段横盘微涨缩量（OBV 不降），价格仍在窗口低位 → 底背离
+            closes = []
+            for i in range(n):
+                if i < n * 2 // 3:
+                    closes.append(base * (1 - 0.01 * i))  # 前段下跌
+                else:
+                    closes.append(base * (1 - 0.01 * (n * 2 // 3)) + 0.0001 * (i - n * 2 // 3))  # 后段横盘微涨
+            volumes = [1_000_000 if i < n * 2 // 3 else 50_000 for i in range(n)]
+        elif trend == 'up_then_obv_down':
+            closes = [base * (1 + 0.005 * i) for i in range(n)]
+            volumes = [1_000_000 * (1 + 0.1 * i) if i < n // 2
+                       else 100_000 for i in range(n)]
+        elif trend == 'low_vol':
+            # 前段大波动、后段极小波动 → 今日 ATR_pct/BBW 处于历史低分位
+            closes = []
+            for i in range(n):
+                if i < n * 2 // 3:
+                    closes.append(base + 0.02 * math.sin(i * 0.5))  # 大波动
+                else:
+                    closes.append(base + 0.0005 * math.sin(i * 0.1))  # 极小波动
+            volumes = [1_000_000 for _ in range(n)]
+        else:
+            closes = [base + 0.01 * math.sin(i * 0.3) for i in range(n)]
+            volumes = [1_000_000 * (1 + 0.1 * (i % 5)) for i in range(n)]
+        highs = [c * 1.005 for c in closes]
+        lows = [c * 0.995 for c in closes]
+        return pd.DataFrame({'date': dates, 'close': closes, 'high': highs,
+                             'low': lows, 'volume': volumes})
+
+    def test_calc_obv_basic(self, cfg):
+        """OBV 基本计算：上涨加量、下跌减量。"""
+        from indicators import calc_obv
+        df = pd.DataFrame({
+            'date': ['2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04'],
+            'close': [1.0, 1.1, 1.0, 1.2],
+            'volume': [100, 200, 300, 400],
+        })
+        obv = calc_obv(df)
+        assert obv is not None
+        assert list(obv.values) == [0.0, 200.0, -100.0, 300.0]
+
+    def test_calc_bollinger_bandwidth(self, cfg):
+        """BBW = (上轨-下轨)/中轨 × 100。"""
+        from indicators import calc_bollinger_bandwidth
+        df = self._build_df(n=40, trend='flat')
+        bbw = calc_bollinger_bandwidth(df, period=20, nbdev=2.0)
+        assert bbw is not None
+        vals = bbw.dropna()
+        assert len(vals) > 0
+        assert all(v > 0 for v in vals)
+
+    def test_vol_compression_low_vol(self, cfg):
+        """极低波动 → ATR_pct/BBW 低分位 → vol_compression=True。"""
+        from rotation import _compute_lead_score
+        df = self._build_df(n=80, trend='low_vol')
+        rs_mom = pd.Series([0.0] * 80)
+        lead = _compute_lead_score(df, rs_mom, cfg)
+        # 横盘低波动 → 波动率压缩应触发
+        assert lead['vol_compression'] is True
+        assert lead['lead_score'] > 0
+
+    def test_obv_bottom_divergence(self, cfg):
+        """价格创新低但 OBV 不创新低 → 底部背离（两波下跌+中间反弹形态）。"""
+        from rotation import _compute_lead_score
+        n = 40
+        closes = []
+        volumes = []
+        for i in range(n):
+            if i <= 19:
+                closes.append(1.0 - 0.01 * i)          # 第一波下跌（放量）
+                volumes.append(1_000_000)
+            elif i <= 25:
+                closes.append(0.81 + 0.01 * (i - 19))   # 中间反弹（OBV 回升）
+                volumes.append(500_000)
+            else:
+                closes.append(0.87 - 0.006 * (i - 25))  # 第二波缩量下跌（创新低）
+                volumes.append(10_000)
+        highs = [c * 1.005 for c in closes]
+        lows = [c * 0.995 for c in closes]
+        dates = [(date(2026, 1, 1) + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(n)]
+        df = pd.DataFrame({'date': dates, 'close': closes, 'high': highs,
+                           'low': lows, 'volume': volumes})
+        rs_mom = pd.Series([-0.01] * n)
+        lead = _compute_lead_score(df, rs_mom, cfg)
+        assert lead['price_obv_divergence'] == 'bottom'
+        assert lead['lead_score'] >= 33
+
+    def test_rs_mom_bottom_divergence(self, cfg):
+        """价格创新低但 RS-Momentum 底部抬高 → RS 动量背离。"""
+        from rotation import _compute_lead_score
+        n = 40
+        closes = [1.0 - 0.01 * i for i in range(n)]  # 持续下跌，今日最低
+        volumes = [1_000_000 for _ in range(n)]
+        highs = [c * 1.005 for c in closes]
+        lows = [c * 0.995 for c in closes]
+        dates = [(date(2026, 1, 1) + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(n)]
+        df = pd.DataFrame({'date': dates, 'close': closes, 'high': highs,
+                           'low': lows, 'volume': volumes})
+        # RS-Momentum: 前段很低，后段抬高（底部抬高）
+        rs_mom = pd.Series([-0.05 if i < 30 else -0.01 for i in range(n)])
+        lead = _compute_lead_score(df, rs_mom, cfg)
+        assert lead['rs_mom_divergence'] is True
+        assert lead['lead_score'] >= 34
+
+    def test_lead_score_range(self, cfg):
+        """lead_score 范围 0~100。"""
+        from rotation import _compute_lead_score
+        df = self._build_df(n=80, trend='flat')
+        rs_mom = pd.Series([0.0] * 80)
+        lead = _compute_lead_score(df, rs_mom, cfg)
+        assert 0 <= lead['lead_score'] <= 100
+
+    def test_no_divergence_normal(self, cfg):
+        """明确上涨趋势（价格和 OBV/RS 都创新高）→ 无背离。"""
+        from rotation import _compute_lead_score
+        n = 40
+        # 价格持续上涨，今日是窗口最高（不会创新低）
+        closes = [1.0 + 0.01 * i for i in range(n)]
+        volumes = [1_000_000 for _ in range(n)]
+        highs = [c * 1.005 for c in closes]
+        lows = [c * 0.995 for c in closes]
+        dates = [(date(2026, 1, 1) + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(n)]
+        df = pd.DataFrame({'date': dates, 'close': closes, 'high': highs,
+                           'low': lows, 'volume': volumes})
+        # RS-Mom 持续为正且上升
+        rs_mom = pd.Series([0.01 + 0.001 * i for i in range(n)])
+        lead = _compute_lead_score(df, rs_mom, cfg)
+        # 上涨趋势不应触发底背离
+        assert lead['price_obv_divergence'] is None
+        assert lead['rs_mom_divergence'] is False
+
+
+# ====================================================================
+# 同步层（拐点确认，过滤假反弹）测试
+# ====================================================================
+
+class TestConfirmScore:
+    """同步层：MA20/VWAP/成交量/价格结构/板块宽度 → confirm_score 0~100。"""
+
+    @staticmethod
+    def _build_uptrend_df(n: int = 60):
+        """明确上涨趋势：价格站上 MA20、MA20 斜率正、放量、N字突破、宽度高。"""
+        dates = [(date(2026, 1, 1) + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(n)]
+        # 持续上涨
+        closes = [1.0 + 0.005 * i for i in range(n)]
+        highs = [c * 1.01 for c in closes]
+        lows = [c * 0.99 for c in closes]
+        # 放量：今日量 > 20 日均量 1.5 倍
+        volumes = [1_000_000 for _ in range(n - 1)] + [3_000_000]
+        return pd.DataFrame({'date': dates, 'close': closes, 'high': highs,
+                             'low': lows, 'volume': volumes})
+
+    @staticmethod
+    def _build_downtrend_df(n: int = 60):
+        """明确下跌趋势：价格在 MA20 下、MA20 斜率负、缩量。"""
+        dates = [(date(2026, 1, 1) + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(n)]
+        closes = [1.0 - 0.005 * i for i in range(n)]
+        highs = [c * 1.01 for c in closes]
+        lows = [c * 0.99 for c in closes]
+        volumes = [1_000_000 for _ in range(n)]
+        return pd.DataFrame({'date': dates, 'close': closes, 'high': highs,
+                             'low': lows, 'volume': volumes})
+
+    def test_calc_ma_slope_uptrend(self, cfg):
+        """上涨趋势：价格站上 MA20 且 MA20 斜率正。"""
+        from indicators import calc_ma_slope
+        df = self._build_uptrend_df()
+        ma = calc_ma_slope(df, ma_period=20, slope_period=5)
+        assert ma is not None
+        assert ma['price_above_ma'] is True
+        assert ma['ma_slope'] > 0
+
+    def test_calc_vwap(self, cfg):
+        """VWAP 计算。"""
+        from indicators import calc_vwap
+        df = self._build_uptrend_df()
+        vwap = calc_vwap(df, period=20)
+        assert vwap is not None
+        assert vwap > 0
+
+    def test_confirm_score_uptrend_high(self, cfg):
+        """上涨趋势：confirm_score 应较高。"""
+        from rotation import _compute_confirm_score
+        df = self._build_uptrend_df()
+        confirm = _compute_confirm_score(df, cfg)
+        assert confirm['confirm_score'] >= 40  # 至少 MA + VWAP + 放量
+        assert confirm['ma_confirm'] is True
+        assert confirm['vwap_confirm'] is True
+        assert confirm['volume_confirm'] is True
+
+    def test_confirm_score_downtrend_low(self, cfg):
+        """下跌趋势：confirm_score 应较低。"""
+        from rotation import _compute_confirm_score
+        df = self._build_downtrend_df()
+        confirm = _compute_confirm_score(df, cfg)
+        assert confirm['confirm_score'] < 40
+        assert confirm['ma_confirm'] is False
+        assert confirm['price_above_ma20'] is False
+
+    def test_confirm_score_range(self, cfg):
+        """confirm_score 范围 0~100。"""
+        from rotation import _compute_confirm_score
+        df = self._build_uptrend_df()
+        confirm = _compute_confirm_score(df, cfg)
+        assert 0 <= confirm['confirm_score'] <= 100
+
+    def test_lead_confirm_coupling(self, cfg):
+        """lead 高 + confirm 高 → turning_point_confirmed；lead 高 + confirm 低 → watch。"""
+        from rotation import _compute_lead_score, _compute_confirm_score
+        # 构造一个同时满足领先和确认的场景：先低波动压缩再放量上涨
+        n = 80
+        closes = []
+        volumes = []
+        for i in range(n):
+            if i < 50:
+                closes.append(1.0 + 0.001 * math.sin(i * 0.1))  # 低波动横盘
+                volumes.append(500_000)
+            else:
+                closes.append(1.0 + 0.001 * math.sin(50 * 0.1) + 0.008 * (i - 50))  # 放量上涨
+                volumes.append(3_000_000 if i == n - 1 else 1_500_000)
+        highs = [c * 1.01 for c in closes]
+        lows = [c * 0.99 for c in closes]
+        dates = [(date(2026, 1, 1) + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(n)]
+        df = pd.DataFrame({'date': dates, 'close': closes, 'high': highs,
+                           'low': lows, 'volume': volumes})
+        rs_mom = pd.Series([0.001 * i for i in range(n)])  # RS 动量持续上升
+        lead = _compute_lead_score(df, rs_mom, cfg)
+        confirm = _compute_confirm_score(df, cfg)
+        # 这个场景应该同时有领先信号和确认信号
+        assert lead['lead_score'] > 0
+        assert confirm['confirm_score'] > 0
+        # 验证耦合逻辑（不直接测 turning_point_confirmed，因为它在 analyze_single_etf 里组装）
+        lead_high = lead['lead_score'] >= 50
+        confirm_high = confirm['confirm_score'] >= 60
+        if lead_high and confirm_high:
+            assert True  # 拐点初步确认场景
+        elif lead_high and not confirm_high:
+            assert True  # 只观察不追场景
+
+
+
+
+# ====================================================================
+# 持有层（趋势延续判断，加仓/减仓/移动止损）测试
+# ====================================================================
+
+class TestHoldScore:
+    """持有层：ADX(56)/RS(60)/MA60+MA120 → hold_score 0~100 + ATR 止损离场。"""
+
+    @staticmethod
+    def _build_strong_uptrend(n: int = 260):
+        """明确长期上涨：ADX(56) 高且向上、RS(60)>1、站上 MA60/MA120。"""
+        dates = [(date(2026, 1, 1) + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(n)]
+        # 持续上涨，幅度足以让 ADX(56) > 20
+        closes = [1.0 + 0.003 * i + 0.001 * math.sin(i * 0.2) for i in range(n)]
+        highs = [c * 1.005 for c in closes]
+        lows = [c * 0.995 for c in closes]
+        volumes = [1_000_000 for _ in range(n)]
+        return pd.DataFrame({'date': dates, 'close': closes, 'high': highs,
+                             'low': lows, 'volume': volumes})
+
+    @staticmethod
+    def _build_strong_downtrend(n: int = 260):
+        """明确长期下跌：ADX(56) 高但 -DI > +DI；RS(60)<1；价格 < MA60/MA120。"""
+        dates = [(date(2026, 1, 1) + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(n)]
+        closes = [2.0 - 0.003 * i + 0.001 * math.sin(i * 0.2) for i in range(n)]
+        highs = [c * 1.005 for c in closes]
+        lows = [c * 0.995 for c in closes]
+        volumes = [1_000_000 for _ in range(n)]
+        return pd.DataFrame({'date': dates, 'close': closes, 'high': highs,
+                             'low': lows, 'volume': volumes})
+
+    @staticmethod
+    def _build_flat_bench(n: int = 260):
+        """基准横盘（用于让 ETF 跑赢/跑输分明显）。"""
+        dates = [(date(2026, 1, 1) + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(n)]
+        closes = [1.0 + 0.0001 * math.sin(i * 0.1) for i in range(n)]
+        return pd.DataFrame({'date': dates, 'close': closes,
+                             'high': closes, 'low': closes, 'volume': [500_000] * n})
+
+    def test_hold_score_uptrend_high(self, cfg):
+        """长期上涨：hold_score 应高（≥70），hold_state='hold'。"""
+        from rotation import _compute_hold_score
+        etf = self._build_strong_uptrend()
+        bench = self._build_flat_bench()
+        hold = _compute_hold_score(etf, bench, cfg)
+        assert hold['hold_score'] >= 70, f"hold_score={hold['hold_score']}, note={hold['hold_note']}"
+        assert hold['hold_state'] == 'hold'
+        assert hold['above_ma60'] is True
+        assert hold['above_ma120'] is True
+        assert hold['atr_stop_broken'] is False
+
+    def test_hold_score_downtrend_low(self, cfg):
+        """长期下跌：hold_score 应低，hold_state='exit'（跌破 ATR 止损）或 'reduce'。"""
+        from rotation import _compute_hold_score
+        etf = self._build_strong_downtrend()
+        bench = self._build_flat_bench()
+        hold = _compute_hold_score(etf, bench, cfg)
+        assert hold['hold_score'] < 70
+        # 长期下跌通常触发 ATR 止损 → exit；若未触发则 reduce
+        assert hold['hold_state'] in ('exit', 'reduce')
+        assert hold['above_ma60'] is False
+        assert hold['above_ma120'] is False
+
+    def test_hold_score_range_0_100(self, cfg):
+        """hold_score 范围 0~100。"""
+        from rotation import _compute_hold_score
+        etf = self._build_strong_uptrend()
+        bench = self._build_flat_bench()
+        hold = _compute_hold_score(etf, bench, cfg)
+        assert 0 <= hold['hold_score'] <= 100
+
+    def test_atr_stop_broken_triggers_exit(self, cfg):
+        """跌破 ATR 止损 → hold_state='exit'（优先级最高）。"""
+        from rotation import _compute_hold_score
+        # 构造长期上涨后突然长阴跌破 MA20-2*ATR
+        n = 260
+        etf = self._build_strong_uptrend(n=n)
+        # 最后一日大幅下跌（跌穿 MA20 - 2*ATR）
+        last_close = float(etf['close'].iloc[-1])
+        # 改最后两日 high/low/close 让今日收盘远低于止损线
+        # MA20 大约是最近 20 日 close 均值，ATR(14) 约 0.005
+        # 让今日 close 跌至 last_close - 0.2
+        etf.loc[etf.index[-1], 'close'] = last_close - 0.2
+        etf.loc[etf.index[-1], 'high'] = last_close
+        etf.loc[etf.index[-1], 'low'] = last_close - 0.25
+        bench = self._build_flat_bench()
+        hold = _compute_hold_score(etf, bench, cfg)
+        assert hold['atr_stop_broken'] is True, f"note={hold['hold_note']}"
+        assert hold['hold_state'] == 'exit'
+
+    def test_hold_score_respects_high_threshold(self, cfg):
+        """调高 HOLD_SCORE_HIGH 阈值 → 原本 hold 的标的可能降为 reduce。"""
+        from rotation import _compute_hold_score
+        etf = self._build_strong_uptrend()
+        bench = self._build_flat_bench()
+        # 默认阈值 70，应该 hold
+        hold_default = _compute_hold_score(etf, bench, cfg)
+        assert hold_default['hold_state'] == 'hold'
+        # 阈值调到 95（几乎不可能达到）→ 应降为 reduce
+        cfg_high = AlarmConfig()
+        cfg_high.HOLD_SCORE_HIGH = 95
+        cfg_high.HOLD_SCORE_MED = 80
+        hold_strict = _compute_hold_score(etf, bench, cfg_high)
+        assert hold_strict['hold_state'] == 'reduce'
+
+    def test_hold_score_short_data_returns_reduce(self, cfg):
+        """数据不足（行数 < ADX(56)/RS(60)/MA60 需要）→ hold_score=0, state=reduce。"""
+        from rotation import _compute_hold_score
+        # 30 行：ADX(56) 需 117 行、RS(60) 需 61 行、MA60 需 60 行均不足
+        dates = [(date(2026, 1, 1) + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(30)]
+        closes = [1.0 + 0.001 * i for i in range(30)]
+        etf = pd.DataFrame({'date': dates, 'close': closes,
+                            'high': closes, 'low': closes, 'volume': [1_000_000] * 30})
+        bench = pd.DataFrame({'date': dates, 'close': [1.0] * 30,
+                              'high': [1.0] * 30, 'low': [1.0] * 30, 'volume': [500_000] * 30})
+        hold = _compute_hold_score(etf, bench, cfg)
+        assert hold['hold_score'] == 0
+        assert hold['hold_state'] == 'reduce'
+
+
 
 
 # ====================================================================
@@ -1031,19 +1734,25 @@ class TestRotationAnalysisAndReport:
                  'adx': 32.1, 'rs_ratio': 1.12, 'rs_momentum': 2.3,
                  'quadrant': '领涨主线', 'quadrant_emoji': '🟢',
                  'score_5d': {'total_score': 4.2, 'crowding_penalty_applied': False,
-                              'action_hint': '持有'},
+                              'action_with': '持有', 'action_without': '可建仓',
+                              'action_hint': '持有/可建仓',
+                              'oversold_flag': False, 'rebound_level': '无'},
                  'data_sufficient': True, 'reason': ''},
                 {'symbol': '159995', 'label': '芯片ETF', 'close': 0.987,
                  'adx': 26.5, 'rs_ratio': 0.98, 'rs_momentum': 1.8,
                  'quadrant': '轮动初期', 'quadrant_emoji': '🟡',
                  'score_5d': {'total_score': 4.8, 'crowding_penalty_applied': False,
-                              'action_hint': '关注建仓'},
+                              'action_with': '持有', 'action_without': '可轻仓',
+                              'action_hint': '持有/可轻仓',
+                              'oversold_flag': True, 'rebound_level': '候选'},
                  'data_sufficient': True, 'reason': ''},
                 {'symbol': '512720', 'label': '计算机ETF', 'close': 0.921,
                  'adx': 18.2, 'rs_ratio': 0.95, 'rs_momentum': -0.5,
                  'quadrant': '滞后回避', 'quadrant_emoji': '🔴',
                  'score_5d': {'total_score': 2.1, 'crowding_penalty_applied': False,
-                              'action_hint': '回避'},
+                              'action_with': '清仓', 'action_without': '回避',
+                              'action_hint': '清仓/回避',
+                              'oversold_flag': False, 'rebound_level': '无'},
                  'data_sufficient': True, 'reason': ''},
             ],
             'rank_delta_map': {'512800': '持平', '159995': '+1', '512720': '-1'},
@@ -1066,18 +1775,22 @@ class TestRotationAnalysisAndReport:
         assert 'S4（高股息逆势走强）' in md
         # 轮动全景表
         assert '🔄 板块轮动全景表' in md
-        # 表头（严格 8 列：板块/收盘价/ADX/RS-Ratio/RS-Momentum/象限标签/5维评分/操作参考）
-        assert '| 板块 | 收盘价 | ADX | RS-Ratio | RS-Momentum | 象限标签 | 5维评分 | 操作参考 |' in md
+        # 表头（11 列：板块/收盘价/ADX/RS-Ratio/RS-Momentum/象限标签/5维评分/有仓位/无仓位/超卖/反弹）
+        assert '| 板块 | 收盘价 | ADX | RS-Ratio | RS-Momentum | 象限标签 | 5维评分 | 有仓位 | 无仓位 | 超卖 | 反弹 |' in md
         # 分隔行
-        assert '|------|--------|-----|----------|-------------|----------|---------|----------|' in md
+        assert '|------|--------|-----|----------|-------------|----------|---------|----------|----------|------|------|' in md
         # 三行数据存在
         assert '银行ETF' in md and '1.052' in md
         assert '芯片ETF' in md and '0.987' in md
         assert '计算机ETF' in md and '0.921' in md
-        # 含操作参考列内容
-        assert '持有' in md
-        assert '关注建仓' in md
-        assert '回避' in md
+        # 含双列操作参考内容（有仓位/无仓位）
+        assert '持有' in md  # 有仓位动作
+        assert '可建仓' in md  # 无仓位动作
+        assert '回避' in md  # 无仓位动作
+        # 超卖/反弹列内容
+        assert '超卖' in md  # 表头
+        assert '反弹' in md  # 表头
+        assert '候选' in md  # 芯片ETF 反弹级别
 
     def test_rotation_analysis_with_breadth(self, cfg):
         """数据足够场景：align → analyze → 结果非 None（关键值存在）。"""

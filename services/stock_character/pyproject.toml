@@ -1,0 +1,15 @@
+[project]
+name = "trading-lab-stock-character"
+version = "0.1.0"
+description = "股票特性分析（连板基因识别 + 游资席位偏好）"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "zzshare",
+    "efinance>=0.5",
+    "baostock>=0.8",
+]
+
+[tool.uv]
+package = false

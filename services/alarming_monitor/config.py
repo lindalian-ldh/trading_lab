@@ -127,7 +127,7 @@ class AlarmConfig:
     # ===== 模块三：板块轮动（RRG + 5维评分）=====
     # 基准指数：RS-Ratio 分母，所有时间序列以此对齐
     ROTATION_BENCHMARK: str = "sh000300"      # 沪深300
-    # 板块篮子：复用 DIVIDEND_BASKET + GROWTH_BASKET + 防御/主题板块
+    # 板块篮子：复用 DIVIDEND_BASKET + GROWTH_BASKET + 防御/主题板块 + 宽基/行业ETF扩展
     ROTATION_BASKET: List[str] = field(default_factory=lambda: [
         "512800",   # 银行ETF
         "516070",   # 公用事业ETF
@@ -148,6 +148,24 @@ class AlarmConfig:
         "159698",   # 粮食ETF鹏华
         "159928",   # 消费ETF汇添富
         "159883",   # 医疗器械ETF永赢
+        # ---- 宽基指数ETF（510300 跟基准沪深300对比会恒为 1.0，可考虑排除）----
+        "510050",   # 华夏上证50ETF（上证50，规模约1455亿，日均成交约19.6亿）
+        # "510300",   # 华泰柏瑞沪深300ETF（沪深300，规模约3420亿，日均成交约38.5亿；与基准同指数）
+        "510500",   # 南方中证500ETF（中证500，规模约968亿，日均成交约14.9亿）
+        "159915",   # 易方达创业板ETF（创业板指，规模约844亿，日均成交约23.3亿）
+        "588000",   # 华夏科创50ETF（科创50，规模约830亿，日均成交约34.8亿）
+        # ---- 行业/主题ETF扩展 ----
+        "512070",   # 易方达证券保险ETF（重仓中国平安/中信证券/东方财富，规模约145亿）
+        "512880",   # 国泰中证全指证券公司ETF（券商ETF中规模最大，规模约308亿）
+        "512690",   # 鹏华酒ETF（消费类ETF中流动性最强，规模约129亿）
+        "159996",   # 国泰家电ETF（家电板块中流动性最好，近一周成交约9.3亿）
+        "512400",   # 南方有色金属ETF（成交活跃，半日成交额可超10亿）
+        "515220",   # 国泰煤炭ETF（煤炭板块中规模最大、流动性最好）
+        "159870",   # 鹏华化工ETF（成交活跃，半日成交额可超10亿）
+        "159869",   # 华夏游戏ETF（游戏板块中规模最大、成交最活跃）
+        "515050",   # 华夏通信ETF（通信硬件端龙头，规模约183亿）
+        "513180",   # 华夏恒生科技ETF（港股科技板块核心标的，规模大流动性好）
+        "513120",   # 广发港股创新药ETF（规模约255亿，同类中流动性居前）
     ])
     # 板块中文名映射（Markdown 报告显示用）
     ROTATION_LABELS: dict = field(default_factory=lambda: {
@@ -170,6 +188,24 @@ class AlarmConfig:
         "159698": "粮食ETF",
         "159928": "消费ETF",
         "159883": "医疗器械ETF",
+        # ---- 宽基指数ETF ----
+        "510050": "上证50ETF",
+        "510300": "沪深300ETF",
+        "510500": "中证500ETF",
+        "159915": "创业板ETF",
+        "588000": "科创50ETF",
+        # ---- 行业/主题ETF扩展 ----
+        "512070": "证券保险ETF",
+        "512880": "券商ETF",
+        "512690": "酒ETF",
+        "159996": "家电ETF",
+        "512400": "有色金属ETF",
+        "515220": "煤炭ETF",
+        "159870": "化工ETF",
+        "159869": "游戏ETF",
+        "515050": "通信ETF",
+        "513180": "恒生科技ETF",
+        "513120": "港股创新药ETF",
     })
 
     # ---- RRG 象限参数 ----
@@ -189,17 +225,171 @@ class AlarmConfig:
         "crowding_penalty":      0.15,   # 拥挤度折扣（量能过度≥2.5倍扣2分）
     })
     # 5维评分归一化区间（每维原始分映射到 [0, 5]）
-    SCORE_REL_MOM_FULL: float = 0.5          # RS-Ratio 超基准 0.5 即满分
-    SCORE_MOM_ACC_FULL: float = 5.0           # RS-Momentum 二阶差分 5% 即满分
-    SCORE_ADX_FULL: float = 30.0             # ADX=30 满分
-    # 量能相对强度 = 近5日均成交额 / 近20日均成交额（放量倍数）
-    # ≥2.0 视为资金高度关注（量能翻倍），≥2.5 视为过度拥挤（量能过大可能短期见顶）
+    # 维1 相对动量改用分段映射（A2）：实战 RS-Ratio 多在 0.9~1.15，
+    # 线性映射到 1.5 满分会把"领涨"压成低分；分段：1.03→1分/1.10→3分/1.20→5分
+    # 跑输基准(RS<1.0)→0分；超过最大断点→满分5.0
+    SCORE_REL_MOM_BREAKPOINTS: List[Tuple[float, float]] = field(default_factory=lambda: [
+        (0.03, 1.0),   # RS-Ratio=1.03 → 1分（轻微跑赢）
+        (0.10, 3.0),   # RS-Ratio=1.10 → 3分（显著跑赢）
+        (0.20, 5.0),   # RS-Ratio=1.20 → 5分（满分，强势主线）
+    ])
+    # 废弃兼容字段：维1 旧线性映射的满分点（RS-Ratio 超基准 0.5 即满分）。
+    # 维1 已改用 SCORE_REL_MOM_BREAKPOINTS 分段映射，此字段仅供旧测试引用兼容，
+    # 不再参与 calc_5d_score 计算。
+    SCORE_REL_MOM_FULL: float = 0.5
+    SCORE_ADX_FULL: float = 30.0             # [已废弃] 旧线性映射满分点，仅供旧测试引用兼容
+    # 维3 ADX 强度分段映射（更符合 ADX 实战含义）：
+    #   ADX ≤ 15 → 0 分（无趋势）
+    #   15 < ADX ≤ 20 → 0~1 分（弱趋势启动）
+    #   20 < ADX ≤ 25 → 1~3 分（趋势形成）
+    #   25 < ADX ≤ 30 → 3~5 分（强趋势）
+    #   ADX > 30 → 5 分（满分封顶）
+    # 段间线性插值。配置为 (adx阈值, 该阈值对应分数) 列表，
+    # 低于首个阈值 → 0 分；高于末个阈值 → 末个分数（封顶）。
+    SCORE_ADX_BREAKPOINTS: List[Tuple[float, float]] = field(default_factory=lambda: [
+        (15.0, 0.0),   # ADX=15 → 0分（无趋势）
+        (20.0, 1.0),   # ADX=20 → 1分（弱趋势）
+        (25.0, 3.0),   # ADX=25 → 3分（趋势形成）
+        (30.0, 5.0),   # ADX=30 → 5分（强趋势，满分）
+    ])
+    # 维3 方向降权：ADX 只代表趋势强度，不辨方向；强下跌也拿高分不合实战。
+    # +DI > -DI（上涨趋势）→ 不降权；-DI > +DI（下跌趋势）→ 乘此系数降权。
+    # 默认 0.1：下跌强趋势最多拿 0.5 分（ADX≥30 × 5 × 0.1 = 0.5），避免虚高。
+    ADX_DOWN_PENALTY: float = 0.1
+    # 维2 动量加速度：横截面 z-score 标准化（解决"5% 绝对阈值对不同资产含义不同"问题）
+    # 先算每只 ETF 的 RS-Momentum 二阶差分原始值，再在横截面（全篮子）做 z-score，
+    # 最后映射到 [0, 5]：score = clip(center + z * slope, 0, 5)
+    #   z = 0  → center 分（加速度处于横截面均值）
+    #   z = +1 → center + slope 分（加速度比均值高1个标准差）
+    #   z = -1 → center - slope 分（加速度比均值低1个标准差）
+    # 默认 center=2.5, slope=2.5 → z=+1 满分5, z=-1 零分0
+    SCORE_MOM_ACC_ZSCORE_CENTER: float = 2.5
+    SCORE_MOM_ACC_ZSCORE_SLOPE: float = 2.5
+    # 旧字段保留兼容（不再用于维2 计算的满分点，仅供旧测试引用）
+    SCORE_MOM_ACC_FULL: float = 5.0
+
+    # ===== 趋势/RS 健康度（拐点预警辅助，不进总分，仅作"预警改善"提示）=====
+    # 目标：把 ADX、RS 从"死值"变成"动态信息"，减少拐点误判。
+    TREND_HEALTH_ADX_SLOPE_PERIOD: int = 5        # ADX 斜率回看天数（ADX - ADX.shift(N)）
+    RS_MOM_ACCEL_PERIOD: int = 5                  # RS 动量加速度回看天数（RS_Mom - RS_Mom.shift(N)）
+    RS_MULTI_PERIODS: List[int] = field(default_factory=lambda: [5, 20, 60])  # 多周期相对强度
+    VOLUME_RATIO_PERIOD: int = 20                 # 成交量比均线周期（Volume / MA_N(Volume)）
+    # 预警改善信号触发条件（三者同时满足）：
+    #   ① ADX 斜率 > TREND_HEALTH_ADX_SLOPE_THRESHOLD（趋势强度增强）
+    #   ② +DI 上穿 -DI（di_cross_up=True）
+    #   ③ RS 动量加速度 > RS_MOM_ACCEL_THRESHOLD（相对强度加速）
+    TREND_HEALTH_ADX_SLOPE_THRESHOLD: float = 0.0
+    RS_MOM_ACCEL_THRESHOLD: float = 0.0
+    # 维4 资金关注度：成交额历史分位（今日成交额在过去N日的百分位）
+    # 腾讯源 ETF 无基金份额数据，真实换手率不可得；amount/(close*volume) 是单位换算
+    # 常数无区分度。改用成交额历史分位作为资金关注度代理（相对自身历史）：
+    #   分位 < 20% → 低关注度（缩量，1分）
+    #   分位 = 50% → 正常（3分）
+    #   分位 > 80% → 高关注度（放量，5分）
+    #   分位 > 95% → 极度放量（5分封顶，可能见顶）
+    SCORE_CAP_ATTENTION_LOOKBACK: int = 60    # 历史分位回看天数
+    SCORE_CAP_ATTENTION_LOW_PCT: float = 20.0  # 分位<此值 → 低关注度
+    SCORE_CAP_ATTENTION_HIGH_PCT: float = 80.0  # 分位>此值 → 高关注度
+    # 旧字段保留兼容（不再用于维4 计算，仅供旧测试引用）
     SCORE_CAP_ATTENTION_FULL: float = 2.0
-    CROWDING_TURNOVER_THRESHOLD: float = 2.5
+    # 维5 拥挤度折扣：基础5分，任一条件命中扣分
+    #   条件1：价格偏离20日均线 > CROWDING_PRICE_DEVIATION_ATR_MULT 倍 ATR（过度偏离均值，回调风险）
+    #   条件2：成交额分位 > CROWDING_AMOUNT_PCT_HIGH（极度放量，可能短期见顶）
+    CROWDING_PRICE_DEVIATION_ATR_MULT: float = 2.0  # 价格偏离20日均线>2倍ATR→扣分
+    CROWDING_AMOUNT_PCT_HIGH: float = 90.0           # 成交额分位>90%→扣分
     CROWDING_PENALTY: float = 2.0             # 拥挤度过高扣除分数
-    # 5维评分阈值（>4 强推荐，>3 关注，<=3 中性/回避）
+    # 旧字段保留兼容（不再用于维5 计算）
+    CROWDING_TURNOVER_THRESHOLD: float = 2.5
+    # 超卖反弹观察系统（不进总分，仅作操作参考的机会提示/降级保护）
+    # 一级（观察）：close < MA20 且 MA20 - close > OVERSOLD_ATR_MULT × ATR
+    # 二级（候选）：一级 + 任一（RS-Momentum>0 / 象限改善 / 分位从<20%回升到>50%）
+    # 三级（确认）：二级 + 任一（RS-Ratio回升+RS-Momentum>0连续2日 / +DI上穿-DI / 分位>60%且站回MA5）
+    OVERSOLD_ATR_MULT: float = 2.0              # 超卖偏离阈值（MA20-close > N×ATR）
+    OVERSOLD_AMOUNT_LOW_PCT: float = 20.0      # 缩量分位（二级条件之一）
+    OVERSOLD_AMOUNT_HIGH_PCT: float = 50.0     # 回升分位（二级条件之一）
+    REBOUND_AMOUNT_CONFIRM_PCT: float = 60.0   # 确认级量能分位
+    REBOUND_LOOKBACK: int = 5                  # 反弹判断历史回看天数
+    # 超卖信号时间约束（方案 B：无状态重算，可回测、可复现）
+    # 超卖触发后 N 日内未出现 RS-Momentum > 0 → 自动失效，level 置"无"
+    # 过期后若再次 RS-Momentum > 0 → 重新从观察/候选开始（计时器归零）
+    # 窗口起点已超卖时保守处理（truncated=True），不自动过期
+    OVERSOLD_VALID_DAYS: int = 5                # 超卖信号有效期（日）
+
+    # ===== 领先层（拐点提前嗅探，不进总分、不改操作矩阵，仅用于观察名单）=====
+    # 目标：提前嗅到可能的拐点。三类信号：
+    #   ① 波动率压缩：ATR_pct / BBW 处于过去一年低分位 → 变盘前夜
+    #   ② 量价背离：价格创新低但 OBV 不创新低（底部背离）/ 价格创新高但 OBV 不创新高（顶部背离）
+    #   ③ RS 动量背离：价格新低但 RS-Momentum 底部抬高
+    # 输出 lead_score: 0~100，每类信号 0~33 分，只用于观察名单，不直接交易。
+    LEAD_LOOKBACK_DAYS: int = 252               # 历史分位回看窗口（约一年交易日）
+    LEAD_VOLATILITY_LOW_PCT: float = 20.0       # 波动率低分位阈值（<此值算压缩）
+    LEAD_DIVERGENCE_WINDOW: int = 20            # 背离对比窗口（创新高/新低的回看天数）
+    LEAD_BOLLINGER_PERIOD: int = 20             # 布林带周期
+    LEAD_BOLLINGER_STD: float = 2.0             # 布林带标准差倍数
+
+    # ===== 同步层（拐点确认，过滤假反弹）=====
+    # 目标：领先信号出现后，等市场确认再行动。5 个确认指标各 0~20 分，合计 0~100。
+    #   ① MA20/MA60：价格站上 MA20 且 MA20 斜率转正
+    #   ② VWAP：价格站上 VWAP（日线累积）
+    #   ③ 成交量：今日量 > 20 日均量 × CONFIRM_VOLUME_MULT
+    #   ④ 价格结构：高低点抬高（N 字突破）
+    #   ⑤ 板块宽度：ETF 自身近 N 日上涨天数占比 > CONFIRM_BREADTH_THRESHOLD
+    #     （注：原版要求成分股数据，此处用 ETF 自身涨跌天数近似）
+    # 规则：lead_score 高 + confirm_score 高 → 拐点初步确认；
+    #       lead_score 高 + confirm_score 低 → 只观察不追。
+    CONFIRM_MA_SHORT: int = 20                 # 短期均线周期
+    CONFIRM_MA_LONG: int = 60                  # 长期均线周期
+    CONFIRM_MA_SLOPE_PERIOD: int = 5           # MA 斜率回看天数（MA_today - MA_N天前）
+    CONFIRM_VWAP_PERIOD: int = 20              # VWAP 累积周期（日线）
+    CONFIRM_VOLUME_MA: int = 20                # 成交量均线周期
+    CONFIRM_VOLUME_MULT: float = 1.5           # 放量倍数阈值
+    CONFIRM_PRICE_STRUCTURE_WINDOW: int = 10    # 价格结构回看窗口（高低点抬高）
+    CONFIRM_BREADTH_WINDOW: int = 20           # 板块宽度回看窗口
+    CONFIRM_BREADTH_THRESHOLD: float = 0.6     # 板块宽度阈值（上涨天数占比）
+
+    # ===== 持有层（趋势延续判断，加仓/减仓/移动止损）=====
+    # 目标：拐点确认后，拿得住趋势。只用于加仓/减仓/移动止损，不用于预测拐点。
+    # 3 类长周期指标（合计 0~100）：
+    #   ① 长周期 ADX（34 分）：ADX(56) > HOLD_ADX_THRESHOLD 给 17 分；ADX 斜率向上给 17 分
+    #   ② 长周期 RS-Ratio（33 分）：RS(60) > HOLD_RS_STRONG 给 33 分
+    #   ③ 长周期均线（33 分）：站上 MA60 给 16 分；站上 MA120 给 17 分
+    # 规则：
+    #   hold_score >= HOLD_SCORE_HIGH       → 持有
+    #   HOLD_SCORE_MED <= hold_score < HIGH  → 减仓（趋势减弱）
+    #   hold_score < HOLD_SCORE_MED         → 减仓加速
+    #   跌破 ATR 止损（close < MA20 - HOLD_ATR_STOP_MULT × ATR(14)）→ 离场（最优先）
+    HOLD_ADX_LONG_PERIOD: int = 56            # 长周期 ADX 周期（季线级趋势）
+    HOLD_ADX_THRESHOLD: float = 20.0          # ADX > 20 视为长周期有趋势
+    HOLD_ADX_SLOPE_PERIOD: int = 5            # ADX 斜率回看天数
+    HOLD_RS_LONG_PERIOD: int = 60             # 长周期 RS-Ratio 平滑窗口
+    HOLD_RS_STRONG: float = 1.0               # RS(60) > 1 视为长周期跑赢基准
+    HOLD_MA_LONG: int = 60                    # 长周期均线 1（季线）
+    HOLD_MA_LONGER: int = 120                  # 长周期均线 2（半年线）
+    HOLD_ATR_STOP_PERIOD: int = 14            # ATR 止损计算周期
+    HOLD_ATR_STOP_MULT: float = 2.0          # ATR 止损倍数（close < MA20 - 2×ATR → 离场）
+    HOLD_SCORE_HIGH: int = 70                 # 持有阈值（≥70 持有）
+    HOLD_SCORE_MED: int = 40                  # 减仓阈值（<70 减仓，<40 加速减仓）
+
+    # 5维评分阈值（>4 强推荐，>3 关注，<=3 中性/回避）—— 仅在象限标签缺失时作兜底
     SCORE_STRONG_THRESHOLD: float = 4.0
     SCORE_ATTENTION_THRESHOLD: float = 3.0
+
+    # ===== 大盘均线过滤（B5）=====
+    # 基准指数收盘价 vs MA20/MA60，判定全局格局：
+    #   above  : close > MA20 且 close > MA60 → 多头格局（系统性机会，领涨主线可加仓）
+    #   below  : close < MA20 且 close < MA60 → 空头格局（系统性下跌，全面防守）
+    #   mixed  : 其他（震荡/过渡，领涨主线持有但不加仓）
+    BENCH_MA_SHORT: int = 20
+    BENCH_MA_LONG: int = 60
+
+    # ===== 波动率风险修正（B6）=====
+    # ATR(14)/close × 100（百分比），不进入加权总分，仅作为操作参考的风险刹车：
+    #   高波动 + 领涨 → 不加仓（持有而非加仓，风险收益比恶化）
+    #   高波动 + 退潮 → 减仓加速
+    #   低波动 + 领涨 → 可持有/加仓（健康趋势）
+    VOLATILITY_PERIOD: int = 14               # ATR 周期（与 ADX 一致，便于复用 talib）
+    VOLATILITY_HIGH_THRESHOLD: float = 3.0    # ATR/close > 3.0% → 高波动
+    VOLATILITY_LOW_THRESHOLD: float = 1.5     # ATR/close < 1.5% → 低波动
 
     # ===== talib 加速 =====
     # True 优先用 talib 计算技术指标（ADX/WMA/MA），不可用时降级 numpy 自实现

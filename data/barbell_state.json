@@ -1,0 +1,11 @@
+{
+  "last_rebalance_date": "2026-09-17",
+  "def_price": 1.541,
+  "off_price": 2.262,
+  "target_weights_at_rebalance": {
+    "regime": "标准配置",
+    "defensive": 0.6,
+    "offensive": 0.4,
+    "cash": 0.0
+  }
+}

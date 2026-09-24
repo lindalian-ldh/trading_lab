@@ -19,7 +19,11 @@ from datetime import datetime
 from typing import Optional
 
 from config import AlarmConfig
-from rotation import align_to_benchmark, analyze_single_etf
+from rotation import (
+    align_to_benchmark,
+    analyze_single_etf,
+    apply_cross_sectional_mom_acc,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +130,11 @@ def run_rotation_analysis(bench_df, etf_full_dfs: dict,
         r = analyze_single_etf(sym, aligned_etf, bench_df, cfg)
         results.append(r)
 
+    # 2.5 横截面 z-score 标准化维2 动量加速度
+    # 单只 ETF 算二阶差分时拿不到其他 ETF 的数据，必须在批量层做后处理：
+    # 收集全篮子 mom_acc_raw → 横截面 z-score → 重映射维2分数 → 重算 total
+    apply_cross_sectional_mom_acc(results, cfg)
+
     # 3. 按 total_score 降序排序（数据不足的放最后）
     def _sort_key(r):
         s5 = r.get('score_5d') or {}
@@ -151,11 +160,45 @@ def run_rotation_analysis(bench_df, etf_full_dfs: dict,
     data_ok = sum(1 for r in results if r.get('data_sufficient'))
     leader = sum(1 for r in results if r.get('quadrant') == '领涨主线')
     laggard = sum(1 for r in results if r.get('quadrant') == '滞后回避')
+    # 超卖反弹统计（不进总分，仅作操作参考提示）
+    # expired_count: 已老化的超卖信号（oversold_expired=True），对外置"无"，默认隐藏
+    oversold_count = sum(1 for r in results
+        if r.get('data_sufficient')
+        and (r.get('score_5d') or {}).get('oversold_flag'))
+    rebound_candidate = sum(1 for r in results
+        if r.get('data_sufficient')
+        and (r.get('score_5d') or {}).get('rebound_level') in ('候选', '确认'))
+    rebound_confirmed = sum(1 for r in results
+        if r.get('data_sufficient')
+        and (r.get('score_5d') or {}).get('rebound_level') == '确认')
+    oversold_expired_count = sum(1 for r in results
+        if r.get('data_sufficient')
+        and (r.get('score_5d') or {}).get('oversold_expired'))
+    # 活跃超卖 = oversold_flag 且 非过期
+    oversold_active_count = sum(1 for r in results
+        if r.get('data_sufficient')
+        and (r.get('score_5d') or {}).get('oversold_flag')
+        and not (r.get('score_5d') or {}).get('oversold_expired', False))
+    # 大盘均线状态（所有 ETF 共用同一基准，取第一个数据充足的结果）
+    bench_state = 'unknown'
+    bench_state_reason = ''
+    for r in results:
+        if r.get('data_sufficient'):
+            bench_state = r.get('bench_state', 'unknown')
+            bench_state_reason = r.get('bench_state_reason', '')
+            break
     summary = {
         'total_basket': len(cfg.ROTATION_BASKET),
         'data_ok': data_ok,
         'leader_count': leader,
         'laggard_count': laggard,
+        'bench_state': bench_state,
+        'bench_state_reason': bench_state_reason,
+        'oversold_count': oversold_count,
+        'oversold_active_count': oversold_active_count,
+        'oversold_expired_count': oversold_expired_count,
+        'rebound_candidate_count': rebound_candidate,
+        'rebound_confirmed_count': rebound_confirmed,
     }
 
     return {
@@ -163,6 +206,7 @@ def run_rotation_analysis(bench_df, etf_full_dfs: dict,
         'rank_delta_map': rank_delta_map,
         'last_rank': last_rank,
         'summary': summary,
+        'oversold_valid_days': cfg.OVERSOLD_VALID_DAYS,
         'analyzed_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
     }
 
@@ -175,9 +219,9 @@ def build_rotation_table_rows(rotation_result: dict) -> list[str]:
     """从轮动分析结果生成 Markdown 表格行（不含表头）。
 
     列顺序严格按用户模板：
-    | 板块 | 收盘价 | ADX | RS-Ratio | RS-Momentum | 象限标签 | 5维评分 | 排名Δ | 操作参考 |
+    | 板块 | 收盘价 | ADX | RS-Ratio | RS-Momentum | 象限标签 | 5维评分 | 排名Δ | 有仓位 | 无仓位 | 超卖 | 反弹 |
 
-    数据不足行：5维评分、排名Δ 列显示"—"，象限显示"数据不足"。
+    数据不足行：5维评分、排名Δ、动作、超卖、反弹列显示"—"，象限显示"数据不足"。
     """
     rows = []
     results = rotation_result.get('results', [])
@@ -195,7 +239,10 @@ def build_rotation_table_rows(rotation_result: dict) -> list[str]:
             quad_s = f'数据不足（{r.get("reason", "未知原因")}）'
             score_s = '—'
             rank_s = '—'
-            action_s = '—'
+            action_with_s = '—'
+            action_without_s = '—'
+            oversold_s = '—'
+            rebound_s = '—'
         else:
             close_s = f"{r['close']:.3f}" if r.get('close') is not None else '—'
             adx_s = f"{r['adx']:.1f}" if r.get('adx') is not None else '—'
@@ -213,20 +260,51 @@ def build_rotation_table_rows(rotation_result: dict) -> list[str]:
             if s5.get('crowding_penalty_applied'):
                 score_s += ' ⚠️'
             rank_s = rank_delta_map.get(sym, '—')
-            action_s = s5.get('action_hint', '—')
+            action_with_s = s5.get('action_with', '—')
+            action_without_s = s5.get('action_without', '—')
+            oversold_s = '是' if s5.get('oversold_flag') else '否'
+            rebound_s = s5.get('rebound_level', '无')
 
-        row = f'| {label} | {close_s} | {adx_s} | {ratio_s} | {mom_s} | {quad_s} | {score_s} | {rank_s} | {action_s} |'
+        row = f'| {label} | {close_s} | {adx_s} | {ratio_s} | {mom_s} | {quad_s} | {score_s} | {rank_s} | {action_with_s} | {action_without_s} | {oversold_s} | {rebound_s} |'
         rows.append(row)
 
     return rows
 
 
 def build_rrg_summary(rotation_result: dict) -> str:
-    """RRG 象限一句话摘要（给 reporter 顶部用）。"""
+    """RRG 象限一句话摘要（给 reporter 顶部用）。
+
+    含大盘均线状态元信息（B5）：让报告一眼看出当前是多头/空头/震荡格局，
+    便于解读"领涨主线却回避"等操作参考的合理性。
+    """
     summary = rotation_result.get('summary', {}) or {}
     total = summary.get('total_basket', 0)
     ok = summary.get('data_ok', 0)
     leader = summary.get('leader_count', 0)
     laggard = summary.get('laggard_count', 0)
+    bench_state = summary.get('bench_state', 'unknown')
+    bench_reason = summary.get('bench_state_reason', '')
+    # 大盘格局中文映射
+    bench_cn = {
+        'above': '多头格局（均线上方，系统性机会）',
+        'below': '空头格局（均线下方，全面防守）',
+        'mixed': '震荡（均线纠缠）',
+        'unknown': '基准数据不足',
+    }.get(bench_state, bench_state)
+    bench_part = f' · 大盘: {bench_cn}' if bench_reason else f' · 大盘: {bench_cn}'
+    # 超卖反弹摘要（活跃 vs 已老化）
+    oversold_active = summary.get('oversold_active_count', 0)
+    oversold_expired = summary.get('oversold_expired_count', 0)
+    rebound_c = summary.get('rebound_candidate_count', 0)
+    oversold_part = ''
+    if oversold_active > 0:
+        oversold_part = f' · 超卖观察 {oversold_active} 只（活跃）'
+        if rebound_c > 0:
+            oversold_part += f'（反弹候选 {rebound_c} 只）'
+        if oversold_expired > 0:
+            oversold_part += f'，已老化 {oversold_expired} 只（默认隐藏）'
+    elif oversold_expired > 0:
+        oversold_part = f' · 超卖已老化 {oversold_expired} 只（默认隐藏）'
     return (f'板块篮子 {total} 只 · 数据充足 {ok} 只 · '
-            f'领涨主线 🟢{leader} 只 · 滞后回避 🔴{laggard} 只')
+            f'领涨主线 🟢{leader} 只 · 滞后回避 🔴{laggard} 只'
+            f'{bench_part}{oversold_part}')

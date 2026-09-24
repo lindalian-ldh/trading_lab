@@ -1145,14 +1145,16 @@ def check_adx(index_df: Optional[pd.DataFrame], cfg: AlarmConfig) -> dict:
         except Exception:
             pass  # 降级 numpy
 
-    # numpy 自实现降级
+    # numpy 自实现降级（_compute_adx 返回三元组，只取 adx）
     if adx_value is None:
-        adx_value = _compute_adx(
+        result = _compute_adx(
             index_df['high'].astype(float).values,
             index_df['low'].astype(float).values,
             index_df['close'].astype(float).values,
             period,
         )
+        if result is not None:
+            adx_value = result[0]  # (adx, plus_di, minus_di) 的第一项
     if adx_value is None or not np.isfinite(adx_value):
         return _insufficient(name, label, 'ADX 计算异常')
 
@@ -1181,10 +1183,12 @@ def check_adx(index_df: Optional[pd.DataFrame], cfg: AlarmConfig) -> dict:
 
 
 def _compute_adx(high: np.ndarray, low: np.ndarray, close: np.ndarray,
-                 period: int) -> Optional[float]:
-    """Wilder ADX 计算（纯 numpy 实现，无外部 TA-Lib 依赖）。
+                 period: int) -> Optional[tuple]:
+    """Wilder ADX 计算（纯 numpy 实现，含 +DI/-DI 方向）。
 
-    返回最新一日的 ADX 值；数据不足或异常返回 None。
+    返回 (adx, plus_di, minus_di) 三元组，均为最新值；
+    任一非有限时对应项为 None；整体失败返回 None。
+    adx 高只代表"趋势强"，不辨方向；方向看 plus_di vs minus_di。
     """
     n = len(high)
     if n < 2 * period + 1:
@@ -1224,8 +1228,14 @@ def _compute_adx(high: np.ndarray, low: np.ndarray, close: np.ndarray,
     adx_arr = _wilder_smooth(dx, period)
     if adx_arr is None or len(adx_arr) == 0:
         return None
-    val = float(adx_arr[-1])
-    return val if np.isfinite(val) else None
+    adx_val = float(adx_arr[-1])
+    pdi_val = float(plus_di[-1])
+    mdi_val = float(minus_di[-1])
+    return (
+        adx_val if np.isfinite(adx_val) else None,
+        pdi_val if np.isfinite(pdi_val) else None,
+        mdi_val if np.isfinite(mdi_val) else None,
+    )
 
 
 def _wilder_smooth(arr: np.ndarray, period: int) -> np.ndarray:
@@ -1359,18 +1369,29 @@ def calc_rs_momentum(rs_ratio: pd.Series, cfg: AlarmConfig) -> Optional[pd.Serie
     return out
 
 
-def calc_adx_etf(etf_df: pd.DataFrame, cfg: AlarmConfig) -> Optional[float]:
-    """ETF 自身的 ADX 值（用于 5 维评分的"ADX 趋势强度"维度）。
+def calc_adx_etf(etf_df: pd.DataFrame, cfg: AlarmConfig) -> Optional[dict]:
+    """ETF 自身的 ADX + 方向 DI（含末2日，用于 +DI 上穿 -DI 判断）。
 
-    与指数 ADX 复用同一 Wilder 算法，但只返回最新值（float）。
-    数据不足返回 None。
+    与指数 ADX 复用同一 Wilder 算法，但返回 dict 含方向信息（+DI/-DI），
+    用于在评分时辨别趋势方向——ADX 高且 +DI>-DI = 强上涨；
+    ADX 高且 -DI>+DI = 强下跌（不该拿高分）。
+
+    扩展返回昨日 +DI/-DI，用于超卖反弹三级确认条件中的"+DI 上穿 -DI"判断
+    （今日 +DI > -DI 且昨日 +DI <= -DI）。
 
     Args:
         etf_df: ETF 日线 DataFrame，需含 high/low/close 列
         cfg: AlarmConfig（取 ADX_PERIOD + USE_TALIB）
 
     Returns:
-        最新 ADX 值（float），失败返回 None。
+        dict: {adx, plus_di, minus_di, direction,
+               plus_di_prev, minus_di_prev, di_cross_up}
+            - adx: 趋势强度（float，0~100，最新）
+            - plus_di / minus_di: 最新 +DI / -DI（float）
+            - direction: 'up' if plus_di > minus_di else 'down'
+            - plus_di_prev / minus_di_prev: 昨日 +DI / -DI（float | None）
+            - di_cross_up: 今日 +DI > -DI 且 昨日 +DI <= -DI（bool）
+        失败返回 None。
     """
     if etf_df is None or etf_df.empty:
         return None
@@ -1382,23 +1403,92 @@ def calc_adx_etf(etf_df: pd.DataFrame, cfg: AlarmConfig) -> Optional[float]:
     if len(etf_df) < need:
         return None
 
-    high = etf_df['high'].astype(float).values
-    low = etf_df['low'].astype(float).values
-    close = etf_df['close'].astype(float).values
+    # 过滤 NaN（ETF 上市晚于基准时首行可能为 NaN，导致 ADX/DI 计算返回 0.0）
+    sub = etf_df[['high', 'low', 'close']].astype(float).dropna()
+    if len(sub) < need:
+        return None
+    high = sub['high'].values
+    low = sub['low'].values
+    close = sub['close'].values
 
-    # talib 加速路径
+    adx_val = None
+    pdi_val = None
+    mdi_val = None
+    pdi_prev = None
+    mdi_prev = None
+
+    # talib 加速路径：分别取 ADX / PLUS_DI / MINUS_DI 全数组
     if _talib_available(cfg):
         try:
             adx_arr = talib.ADX(high, low, close, timeperiod=period)
-            if adx_arr is None or len(adx_arr) == 0:
-                return None
-            val = float(adx_arr[-1])
-            return val if np.isfinite(val) else None
+            if adx_arr is not None and len(adx_arr) > 0:
+                v = float(adx_arr[-1])
+                if np.isfinite(v):
+                    adx_val = v
+            pdi_arr = talib.PLUS_DI(high, low, close, timeperiod=period)
+            if pdi_arr is not None and len(pdi_arr) > 0:
+                v = float(pdi_arr[-1])
+                if np.isfinite(v):
+                    pdi_val = v
+                if len(pdi_arr) >= 2:
+                    vp = float(pdi_arr[-2])
+                    if np.isfinite(vp):
+                        pdi_prev = vp
+            mdi_arr = talib.MINUS_DI(high, low, close, timeperiod=period)
+            if mdi_arr is not None and len(mdi_arr) > 0:
+                v = float(mdi_arr[-1])
+                if np.isfinite(v):
+                    mdi_val = v
+                if len(mdi_arr) >= 2:
+                    vp = float(mdi_arr[-2])
+                    if np.isfinite(vp):
+                        mdi_prev = vp
         except Exception:
             pass
 
-    # numpy 自实现（与 check_adx 共用 _compute_adx）
-    return _compute_adx(high, low, close, period)
+    # numpy 降级路径（_compute_adx 返回三元组标量，无昨日值）
+    if adx_val is None:
+        result = _compute_adx(high, low, close, period)
+        if result is None:
+            return None
+        adx_val, pdi_val, mdi_val = result
+
+    if adx_val is None:
+        return None
+    direction = 'up' if (pdi_val or 0) > (mdi_val or 0) else 'down'
+    # +DI 上穿 -DI：今日 +DI > -DI 且 昨日 +DI <= -DI
+    di_cross_up = False
+    if pdi_prev is not None and mdi_prev is not None:
+        di_cross_up = ((pdi_val or 0) > (mdi_val or 0)) and (pdi_prev <= mdi_prev)
+    # DI 差 = +DI - -DI（正=多方占优，负=空方占优）
+    di_diff = (pdi_val or 0.0) - (mdi_val or 0.0)
+    # ADX 斜率 = ADX[-1] - ADX[-N]（趋势强度增强/减弱）
+    adx_slope = None
+    slope_period = getattr(cfg, 'TREND_HEALTH_ADX_SLOPE_PERIOD', 5)
+    # talib 路径：adx_arr 已在上方计算（如果有）
+    adx_arr_for_slope = None
+    if _talib_available(cfg):
+        try:
+            adx_arr_for_slope = talib.ADX(high, low, close, timeperiod=period)
+        except Exception:
+            adx_arr_for_slope = None
+    if adx_arr_for_slope is not None and len(adx_arr_for_slope) > slope_period:
+        v_today = float(adx_arr_for_slope[-1])
+        v_prev = float(adx_arr_for_slope[-1 - slope_period])
+        if np.isfinite(v_today) and np.isfinite(v_prev):
+            adx_slope = v_today - v_prev
+    # numpy 降级：无法高效取历史 ADX 序列，adx_slope 留 None（trend_health 会降级处理）
+    return {
+        'adx': adx_val,
+        'plus_di': pdi_val,
+        'minus_di': mdi_val,
+        'direction': direction,
+        'plus_di_prev': pdi_prev,
+        'minus_di_prev': mdi_prev,
+        'di_cross_up': di_cross_up,
+        'di_diff': round(di_diff, 2),
+        'adx_slope': round(adx_slope, 4) if adx_slope is not None else None,
+    }
 
 
 def calc_turnover_ratio(etf_df: pd.DataFrame) -> Optional[float]:
@@ -1434,3 +1524,699 @@ def calc_turnover_ratio(etf_df: pd.DataFrame) -> Optional[float]:
     if ma20 <= 0:
         return None
     return ma5 / ma20
+
+
+def calc_amount_percentile(etf_df: pd.DataFrame,
+                           cfg: AlarmConfig) -> Optional[float]:
+    """ETF 资金关注度代理：成交额历史分位（0~100）。
+
+    腾讯源 ETF 无基金份额数据，真实换手率不可得；而 amount/(close*volume)
+    是单位换算常数（close*volume ≈ amount），无横截面区分度。改用"成交额
+    历史分位"作为资金关注度代理：今日成交额在过去 N 日（默认60日）序列中
+    的百分位，反映"今日量能相对自身历史的热度"。
+
+    相比旧的 MA5/MA20 量比，历史分位的优势：
+    - 不受品种自身量级影响（银行ETF成交额天然低于芯片ETF，量比无法跨品种
+      比较，但分位可以：银行ETF今日分位90% = 芯片ETF今日分位90% = 各自
+      相对自身历史都处于放量状态）
+    - 更直观：分位80% = 过去60日里只有20%的日子比今天更放量
+
+    典型区间：
+        < 20%  ：缩量（资金关注度低）
+        ~50%   ：正常
+        > 80%  ：放量（资金关注度上升）
+        > 95%  ：极度放量（可能短期见顶）
+
+    Args:
+        etf_df: ETF 日线，需含 amount 列
+        cfg: AlarmConfig（取 SCORE_CAP_ATTENTION_LOOKBACK）
+
+    Returns:
+        成交额历史分位（float，0~100），失败返回 None。
+    """
+    if etf_df is None or etf_df.empty or 'amount' not in etf_df.columns:
+        return None
+    amt = etf_df['amount'].astype(float).dropna()
+    lookback = cfg.SCORE_CAP_ATTENTION_LOOKBACK
+    if len(amt) < lookback:
+        # 数据不足时用全部可用数据
+        if len(amt) < 10:
+            return None
+        lookback = len(amt)
+    today = float(amt.iloc[-1])
+    hist = amt.iloc[-lookback:].values
+    if today <= 0 or len(hist) == 0:
+        return None
+    # 分位 = 历史序列中 <= 今日值的比例 × 100
+    percentile = float(np.sum(hist <= today) / len(hist) * 100.0)
+    return round(percentile, 1)
+
+
+def calc_amount_percentile_series(etf_df: pd.DataFrame,
+                                  cfg: AlarmConfig,
+                                  days: int = 5) -> Optional[list]:
+    """返回末 N 日成交额历史分位序列（0~100）。
+
+    用于超卖反弹二级条件"成交额分位从<20%回升到>50%"的判断：
+    对末 N 日每一日，计算其在过去 lookback 日序列中的分位。
+    返回列表按时间升序，末元素为今日。
+
+    Args:
+        etf_df: ETF 日线，需含 amount 列
+        cfg: AlarmConfig（取 SCORE_CAP_ATTENTION_LOOKBACK）
+        days: 返回末 N 日的分位
+
+    Returns:
+        list[float]，长度=days，按时间升序，末元素为今日；
+        数据不足返回 None。
+    """
+    if etf_df is None or etf_df.empty or 'amount' not in etf_df.columns:
+        return None
+    amt = etf_df['amount'].astype(float).dropna()
+    lookback = cfg.SCORE_CAP_ATTENTION_LOOKBACK
+    need = lookback + days
+    if len(amt) < need:
+        if len(amt) < 10 + days:
+            return None
+        lookback = len(amt) - days
+        if lookback < 5:
+            return None
+    result = []
+    for i in range(days, 0, -1):
+        # 取末 i 日作为"当日"，其过去 lookback 日作为历史
+        end_idx = len(amt) - i + 1
+        start_idx = max(0, end_idx - lookback)
+        if end_idx <= start_idx:
+            result.append(0.0)
+            continue
+        hist = amt.iloc[start_idx:end_idx].values
+        if len(hist) == 0:
+            result.append(0.0)
+            continue
+        val = float(hist[-1])
+        if val <= 0:
+            result.append(0.0)
+            continue
+        pct = float(np.sum(hist <= val) / len(hist) * 100.0)
+        result.append(round(pct, 1))
+    return result
+
+
+def calc_volume_ratio(etf_df: pd.DataFrame,
+                      period: int = 20) -> Optional[float]:
+    """成交量比 = 今日成交量 / 过去 N 日均量。
+
+    用途：判断今日大涨/大跌是否有量能配合。
+        > 1.5 ：放量（资金关注度上升）
+        0.8~1.5：正常
+        < 0.8 ：缩量（无量上涨/下跌可靠性低）
+
+    Args:
+        etf_df: ETF 日线（需含 volume 列）
+        period: 均量周期，默认 20
+
+    Returns:
+        float: 成交量比，失败返回 None
+    """
+    if etf_df is None or etf_df.empty:
+        return None
+    if 'volume' not in etf_df.columns:
+        return None
+    vol = etf_df['volume'].astype(float).dropna()
+    if len(vol) < period + 1:
+        return None
+    last_vol = float(vol.iloc[-1])
+    ma_vol = float(vol.iloc[-period - 1:-1].mean())  # 不含今日的过去 N 日均量
+    if ma_vol <= 0 or not np.isfinite(ma_vol):
+        return None
+    return round(last_vol / ma_vol, 3)
+
+
+def calc_multi_period_rs(etf_df: pd.DataFrame,
+                         bench_df: pd.DataFrame,
+                         periods: list = None) -> Optional[dict]:
+    """多周期相对强度：ETF 收益 - 基准收益，避免单周期骗人。
+
+    对每个周期 N：
+        rs_N = (close[-1]/close[-N] - 1) - (bench_close[-1]/bench_close[-N] - 1)
+
+    用途：多周期一致（5/20/60 日都跑赢）才是真正强于基准；
+    单周期（如 5 日）跑赢可能只是短期反弹。
+
+    Args:
+        etf_df: ETF 日线（需含 close 列，已对齐基准）
+        bench_df: 基准日线（需含 close 列，已对齐 ETF）
+        periods: 周期列表，默认 [5, 20, 60]
+
+    Returns:
+        dict: {period: rs_value}，rs_value 单位为百分比；失败返回 None
+    """
+    if etf_df is None or bench_df is None or etf_df.empty or bench_df.empty:
+        return None
+    if 'close' not in etf_df.columns or 'close' not in bench_df.columns:
+        return None
+    if len(etf_df) != len(bench_df):
+        return None
+    if periods is None:
+        periods = [5, 20, 60]
+    etf_close = etf_df['close'].astype(float).dropna()
+    bench_close = bench_df['close'].astype(float).dropna()
+    # dropna 后长度可能不一致，取交集对齐
+    min_len = min(len(etf_close), len(bench_close))
+    if min_len <= 0:
+        return None
+    etf_arr = etf_close.iloc[-min_len:].values
+    bench_arr = bench_close.iloc[-min_len:].values
+    result = {}
+    for p in periods:
+        if min_len <= p:
+            result[p] = None
+            continue
+        etf_ret = (etf_arr[-1] / etf_arr[-1 - p] - 1) * 100.0
+        bench_ret = (bench_arr[-1] / bench_arr[-1 - p] - 1) * 100.0
+        if np.isfinite(etf_ret) and np.isfinite(bench_ret):
+            result[p] = round(etf_ret - bench_ret, 2)
+        else:
+            result[p] = None
+    return result
+
+
+def calc_bollinger_bandwidth(etf_df: pd.DataFrame,
+                             period: int = 20,
+                             nbdev: float = 2.0) -> Optional[pd.Series]:
+    """布林带宽度 BBW = (上轨 - 下轨) / 中轨 × 100（百分比）。
+
+    用途：波动率压缩检测。BBW 处于历史低分位 → 变盘前夜（盘整后可能突破）。
+
+    Args:
+        etf_df: ETF 日线（需含 close 列）
+        period: 布林带周期，默认 20
+        nbdev: 标准差倍数，默认 2.0
+
+    Returns:
+        pd.Series: BBW 序列（百分比），前 period-1 项为 NaN；失败返回 None
+    """
+    if etf_df is None or etf_df.empty or 'close' not in etf_df.columns:
+        return None
+    close = etf_df['close'].astype(float).dropna()
+    if len(close) < period:
+        return None
+    mid = close.rolling(period).mean()
+    std = close.rolling(period).std(ddof=0)
+    upper = mid + nbdev * std
+    lower = mid - nbdev * std
+    bbw = (upper - lower) / mid * 100.0
+    # 对齐原始索引（dropna 后索引可能不连续）
+    return pd.Series(bbw.values, index=close.index, name='bbw')
+
+
+def calc_obv(etf_df: pd.DataFrame) -> Optional[pd.Series]:
+    """OBV（On-Balance Volume，能量潮）。
+
+    计算：
+        OBV[t] = OBV[t-1] + volume[t]  if close[t] > close[t-1]
+        OBV[t] = OBV[t-1] - volume[t]  if close[t] < close[t-1]
+        OBV[t] = OBV[t-1]              if close[t] == close[t-1]
+
+    用途：量价背离检测。价格创新低但 OBV 不创新低 → 底部背离（买盘承接）；
+          价格创新高但 OBV 不创新高 → 顶部背离（卖盘涌出）。
+
+    Args:
+        etf_df: ETF 日线（需含 close + volume 列）
+
+    Returns:
+        pd.Series: OBV 序列（首项为 0）；失败返回 None
+    """
+    if etf_df is None or etf_df.empty:
+        return None
+    if 'close' not in etf_df.columns or 'volume' not in etf_df.columns:
+        return None
+    sub = etf_df[['close', 'volume']].astype(float).dropna()
+    if len(sub) < 2:
+        return None
+    close = sub['close'].values
+    volume = sub['volume'].values
+    obv = np.zeros(len(close), dtype=float)
+    for i in range(1, len(close)):
+        if close[i] > close[i - 1]:
+            obv[i] = obv[i - 1] + volume[i]
+        elif close[i] < close[i - 1]:
+            obv[i] = obv[i - 1] - volume[i]
+        else:
+            obv[i] = obv[i - 1]
+    return pd.Series(obv, index=sub.index, name='obv')
+
+
+def calc_ma_slope(etf_df: pd.DataFrame,
+                  ma_period: int = 20,
+                  slope_period: int = 5) -> Optional[dict]:
+    """计算 MA 及斜率，返回 {ma_value, ma_slope, price_above_ma}。
+
+    Args:
+        etf_df: ETF 日线（需含 close 列）
+        ma_period: 均线周期
+        slope_period: 斜率回看天数（MA_today - MA_N天前）
+
+    Returns:
+        dict: {
+            'ma_value': float,        # 今日 MA 值
+            'ma_slope': float,        # MA 斜率（MA_today - MA_N天前）
+            'price_above_ma': bool,   # 今日收盘价是否站上 MA
+        }；失败返回 None
+    """
+    if etf_df is None or etf_df.empty or 'close' not in etf_df.columns:
+        return None
+    close = etf_df['close'].astype(float).dropna()
+    if len(close) < ma_period + slope_period:
+        return None
+    ma = close.rolling(ma_period).mean()
+    ma_today = float(ma.iloc[-1])
+    ma_prev = float(ma.iloc[-1 - slope_period])
+    price_today = float(close.iloc[-1])
+    if not (np.isfinite(ma_today) and np.isfinite(ma_prev)):
+        return None
+    return {
+        'ma_value': round(ma_today, 4),
+        'ma_slope': round(ma_today - ma_prev, 4),
+        'price_above_ma': price_today > ma_today,
+    }
+
+
+def calc_vwap(etf_df: pd.DataFrame,
+              period: int = 20) -> Optional[float]:
+    """日线 VWAP（成交量加权平均价）。
+
+    计算：过去 N 日 Σ(典型价格 × 成交量) / Σ(成交量)
+    典型价格 = (high + low + close) / 3
+
+    用途：价格站上 VWAP → 多头占优；跌破 VWAP → 空头占优。
+
+    Args:
+        etf_df: ETF 日线（需含 high/low/close/volume 列）
+        period: 累积周期，默认 20
+
+    Returns:
+        float: VWAP 值；失败返回 None
+    """
+    if etf_df is None or etf_df.empty:
+        return None
+    for col in ('high', 'low', 'close', 'volume'):
+        if col not in etf_df.columns:
+            return None
+    sub = etf_df[['high', 'low', 'close', 'volume']].astype(float).dropna()
+    if len(sub) < period:
+        return None
+    window = sub.iloc[-period:]
+    typical = (window['high'] + window['low'] + window['close']) / 3.0
+    vol = window['volume']
+    total_pv = float((typical * vol).sum())
+    total_vol = float(vol.sum())
+    if total_vol <= 0 or not np.isfinite(total_vol):
+        return None
+    return round(total_pv / total_vol, 4)
+
+
+def calc_volatility_ratio(etf_df: pd.DataFrame,
+                          cfg: AlarmConfig) -> Optional[float]:
+    """ETF 波动率代理：ATR(14) / close × 100（百分比，B6 改进）。
+
+    用 ATR(14)（14日平均真实波幅）除以最新收盘价，得到"日均波动幅度占价格比例"。
+    相比标准差波动率，ATR 对短期异常波动（跳空、长影线）更敏感，且直观反映
+    "持有一天的平均风险敞口"。
+
+    典型区间（ETF 品种经验值）：
+        < 1.5%  ：低波动（稳健趋势，加仓风险收益比好）
+        1.5~3.0%：中等波动（正常）
+        > 3.0%  ：高波动（风险收益比恶化，加仓需谨慎/降级）
+
+    用于操作参考的风险修正（不进入加权总分）：
+        高波动 + 领涨主线 → 不加仓（持有而非加仓）
+        高波动 + 退潮预警 → 减仓加速
+        低波动 + 领涨主线 → 可持有/加仓（健康趋势）
+
+    Args:
+        etf_df: ETF 日线，需含 high/low/close 列
+        cfg: AlarmConfig（取 VOLATILITY_PERIOD + USE_TALIB）
+
+    Returns:
+        波动率百分比（float，单位%），失败返回 None。
+    """
+    if etf_df is None or etf_df.empty:
+        return None
+    for col in ('high', 'low', 'close'):
+        if col not in etf_df.columns:
+            return None
+    period = cfg.VOLATILITY_PERIOD
+    need = period + 2  # ATR 需要 period+1 根 K 线做平滑
+    if len(etf_df) < need:
+        return None
+
+    # 过滤 NaN（ETF 上市晚于基准时首行可能为 NaN，导致 ATR 计算返回 nan）
+    sub = etf_df[['high', 'low', 'close']].astype(float).dropna()
+    if len(sub) < need:
+        return None
+    high = sub['high'].values
+    low = sub['low'].values
+    close = sub['close'].values
+    last_close = float(close[-1])
+    if last_close <= 0:
+        return None
+
+    # talib 加速路径
+    if _talib_available(cfg):
+        try:
+            atr_arr = talib.ATR(high, low, close, timeperiod=period)
+            if atr_arr is not None and len(atr_arr) > 0:
+                v = float(atr_arr[-1])
+                if np.isfinite(v) and v > 0:
+                    return v / last_close * 100.0
+        except Exception:
+            pass  # 降级 numpy
+
+    # numpy 降级：Wilder 平滑 ATR
+    # TR = max(high-low, |high-prev_close|, |low-prev_close|)
+    if len(close) < 2:
+        return None
+    prev_close = close[:-1]
+    tr_high = np.maximum(high[1:] - low[1:], np.abs(high[1:] - prev_close))
+    tr = np.maximum(tr_high, np.abs(low[1:] - prev_close))
+    if len(tr) < period:
+        return None
+    # Wilder 平滑：首个ATR = 简单平均；后续 ATR = (前ATR*(period-1) + TR) / period
+    atr = float(tr[:period].mean())
+    for i in range(period, len(tr)):
+        atr = (atr * (period - 1) + float(tr[i])) / period
+    if atr <= 0 or not np.isfinite(atr):
+        return None
+    return atr / last_close * 100.0
+
+
+def calc_atr_pct_series(etf_df: pd.DataFrame,
+                         cfg: AlarmConfig) -> Optional[pd.Series]:
+    """返回 ATR(14)/close × 100 的完整序列（百分比），用于超卖历史回看。
+
+    与 calc_volatility_ratio 算法一致（Wilder ATR），但返回全序列而非末值。
+    用于 _classify_oversold_rebound 的时间约束逻辑：需要逐日判断是否超卖，
+    从而确定"首次触发日"和"信号持续天数"。
+
+    Args:
+        etf_df: ETF 日线（需含 high/low/close 列，已 dropna）
+        cfg: AlarmConfig（取 VOLATILITY_PERIOD + USE_TALIB）
+
+    Returns:
+        pd.Series: 与 etf_df 等长的 ATR_pct 序列（百分比），
+                  前 period-1 项为 NaN（平滑预热期）。失败返回 None。
+    """
+    if etf_df is None or etf_df.empty:
+        return None
+    for col in ('high', 'low', 'close'):
+        if col not in etf_df.columns:
+            return None
+    period = cfg.VOLATILITY_PERIOD
+    need = period + 2
+    # 过滤 NaN（与 calc_volatility_ratio 一致）
+    sub = etf_df[['high', 'low', 'close']].astype(float).dropna()
+    if len(sub) < need:
+        return None
+
+    high = sub['high'].values
+    low = sub['low'].values
+    close = sub['close'].values
+
+    # talib 加速路径
+    if _talib_available(cfg):
+        try:
+            atr_arr = talib.ATR(high, low, close, timeperiod=period)
+            if atr_arr is not None and len(atr_arr) > 0:
+                atr_pct = np.where(
+                    (close > 0) & np.isfinite(atr_arr) & (atr_arr > 0),
+                    atr_arr / close * 100.0, np.nan)
+                return pd.Series(atr_pct, index=sub.index)
+        except Exception:
+            pass  # 降级 numpy
+
+    # numpy 降级：Wilder 平滑 ATR（全序列）
+    if len(close) < 2:
+        return None
+    prev_close = close[:-1]
+    tr_high = np.maximum(high[1:] - low[1:], np.abs(high[1:] - prev_close))
+    tr = np.maximum(tr_high, np.abs(low[1:] - prev_close))
+    if len(tr) < period:
+        return None
+    # Wilder 平滑：全序列
+    atr_arr = np.full(len(close), np.nan)
+    s = float(tr[:period].sum())
+    atr_arr[period] = s / period  # 第 period+1 个位置（0-indexed）
+    for i in range(period, len(tr)):
+        s = s - s / period + float(tr[i])
+        atr_arr[i + 1] = s / period  # i+1 因为 tr 比 close 少 1
+    atr_pct = np.where(
+        (close > 0) & np.isfinite(atr_arr) & (atr_arr > 0),
+        atr_arr / close * 100.0, np.nan)
+    return pd.Series(atr_pct, index=sub.index)
+
+
+# ====================================================================
+# 持有层（长周期指标：ADX(56) / RS(60) / MA60/MA120 / ATR 止损）
+# ====================================================================
+
+def calc_long_adx(etf_df: pd.DataFrame,
+                  period: int = 56,
+                  slope_period: int = 5,
+                  cfg: Optional[AlarmConfig] = None) -> Optional[dict]:
+    """长周期 ADX（默认 56），用于持有层趋势延续判断。
+
+    与 calc_adx_etf 算法一致（Wilder ADX + PLUS_DI/MINUS_DI），但允许自定义周期，
+    返回精简 dict（持有层只需 ADX 数值、斜率、是否向上）。
+
+    Args:
+        etf_df: ETF 日线，需含 high/low/close
+        period: ADX 周期（持有层默认 56）
+        slope_period: ADX 斜率回看天数
+        cfg: AlarmConfig（取 USE_TALIB；可缺省走 numpy 降级）
+
+    Returns:
+        dict: {adx, adx_slope, rising, plus_di, minus_di}
+            - adx: 长周期 ADX 最新值（float）
+            - adx_slope: ADX_today - ADX_N天前（正=增强，负=减弱）
+            - rising: adx > 0 且 adx_slope > 0（趋势在增强）
+            - plus_di / minus_di: 长周期 +DI / -DI（参考用，不做方向判断）
+        失败返回 None。
+    """
+    if etf_df is None or etf_df.empty:
+        return None
+    for col in ('high', 'low', 'close'):
+        if col not in etf_df.columns:
+            return None
+    need = 2 * period + 5
+    sub = etf_df[['high', 'low', 'close']].astype(float).dropna()
+    if len(sub) < need:
+        return None
+    high = sub['high'].values
+    low = sub['low'].values
+    close = sub['close'].values
+
+    adx_val = None
+    pdi_val = None
+    mdi_val = None
+    adx_arr_full = None
+
+    if cfg is not None and _talib_available(cfg):
+        try:
+            adx_arr_full = talib.ADX(high, low, close, timeperiod=period)
+            if adx_arr_full is not None and len(adx_arr_full) > 0:
+                v = float(adx_arr_full[-1])
+                if np.isfinite(v):
+                    adx_val = v
+            pdi_arr = talib.PLUS_DI(high, low, close, timeperiod=period)
+            if pdi_arr is not None and len(pdi_arr) > 0:
+                v = float(pdi_arr[-1])
+                if np.isfinite(v):
+                    pdi_val = v
+            mdi_arr = talib.MINUS_DI(high, low, close, timeperiod=period)
+            if mdi_arr is not None and len(mdi_arr) > 0:
+                v = float(mdi_arr[-1])
+                if np.isfinite(v):
+                    mdi_val = v
+        except Exception:
+            adx_arr_full = None
+
+    # numpy 降级：_compute_adx 返回三元组标量（无历史序列）
+    if adx_val is None:
+        result = _compute_adx(high, low, close, period)
+        if result is None:
+            return None
+        adx_val, pdi_val, mdi_val = result
+
+    if adx_val is None:
+        return None
+
+    # ADX 斜率：talib 路径有完整序列；numpy 路径无序列 → 留 None
+    adx_slope = None
+    if adx_arr_full is not None and len(adx_arr_full) > slope_period:
+        v_today = float(adx_arr_full[-1])
+        v_prev = float(adx_arr_full[-1 - slope_period])
+        if np.isfinite(v_today) and np.isfinite(v_prev):
+            adx_slope = v_today - v_prev
+
+    rising = (adx_val > 0) and (adx_slope is not None and adx_slope > 0)
+
+    return {
+        'adx': round(float(adx_val), 2),
+        'adx_slope': round(float(adx_slope), 4) if adx_slope is not None else None,
+        'rising': bool(rising),
+        'plus_di': round(float(pdi_val), 2) if pdi_val is not None else None,
+        'minus_di': round(float(mdi_val), 2) if mdi_val is not None else None,
+    }
+
+
+def calc_long_rs_ratio(etf_close: pd.Series,
+                       bench_close: pd.Series,
+                       period: int = 60,
+                       cfg: Optional[AlarmConfig] = None) -> Optional[float]:
+    """长周期 RS-Ratio（默认 60 日 WMA 平滑），用于持有层判断长周期跑赢基准。
+
+    与 calc_rs_ratio 算法一致（归一化 + WMA），但允许自定义周期，返回末值标量。
+
+    Args:
+        etf_close: ETF 收盘价序列
+        bench_close: 基准收盘价序列（等长对齐）
+        period: WMA 平滑周期（持有层默认 60）
+        cfg: AlarmConfig（取 USE_TALIB；可缺省走 pandas 降级）
+
+    Returns:
+        float: 长周期 RS-Ratio 末值；失败返回 None。
+    """
+    if etf_close is None or bench_close is None:
+        return None
+    if len(etf_close) < period + 1 or len(bench_close) < period + 1:
+        return None
+    if len(etf_close) != len(bench_close):
+        return None
+
+    etf_s = pd.to_numeric(etf_close.astype(float), errors='coerce')
+    bch_s = pd.to_numeric(bench_close.astype(float), errors='coerce')
+    first_valid_etf = etf_s.first_valid_index()
+    first_valid_bch = bch_s.first_valid_index()
+    if first_valid_etf is None or first_valid_bch is None:
+        return None
+    try:
+        base_etf = float(etf_s.loc[first_valid_etf])
+        base_bch = float(bch_s.loc[first_valid_bch])
+    except Exception:
+        base_etf = float(etf_s.iloc[0])
+        base_bch = float(bch_s.iloc[0])
+    if base_etf <= 0 or base_bch <= 0:
+        return None
+    etf_rel = etf_s / base_etf
+    bch_rel = bch_s / base_bch
+    ratio = (etf_rel / bch_rel).astype(float)
+
+    last_val = None
+    if cfg is not None and _talib_available(cfg):
+        try:
+            arr = talib.WMA(ratio.values, timeperiod=period)
+            if arr is not None and len(arr) > 0:
+                v = float(arr[-1])
+                if np.isfinite(v):
+                    last_val = v
+        except Exception:
+            pass
+
+    if last_val is None:
+        weights = np.arange(1, period + 1, dtype=float)
+        out = ratio.rolling(period).apply(
+            lambda x: float((x * weights).sum() / weights.sum()), raw=True
+        )
+        v = float(out.iloc[-1])
+        if not np.isfinite(v):
+            return None
+        last_val = v
+
+    return round(last_val, 4)
+
+
+def calc_atr_stop(etf_df: pd.DataFrame,
+                   period: int = 14,
+                   mult: float = 2.0,
+                   ma_period: int = 20,
+                   cfg: Optional[AlarmConfig] = None) -> Optional[dict]:
+    """ATR 移动止损判断（持有层离场信号）。
+
+    公式：stop_line = MA(ma_period) - mult × ATR(period)
+          atr_stop_broken = close < stop_line
+
+    用于持有层"跌破 ATR 止损 → 离场"规则，优先级最高（高于 hold_score 阈值）。
+
+    Args:
+        etf_df: ETF 日线，需含 high/low/close
+        period: ATR 周期（默认 14）
+        mult: ATR 倍数（默认 2.0）
+        ma_period: MA 周期（默认 20）
+        cfg: AlarmConfig（取 USE_TALIB；可缺省走 numpy 降级）
+
+    Returns:
+        dict: {
+            'stop_line': float,           # 止损线值
+            'ma_value': float,             # MA 值
+            'atr_value': float,            # ATR 值
+            'close_today': float,          # 今日收盘
+            'atr_stop_broken': bool,       # 是否跌破止损线
+        }；失败返回 None
+    """
+    if etf_df is None or etf_df.empty:
+        return None
+    for col in ('high', 'low', 'close'):
+        if col not in etf_df.columns:
+            return None
+    sub = etf_df[['high', 'low', 'close']].astype(float).dropna()
+    need = max(period + 2, ma_period)
+    if len(sub) < need:
+        return None
+    high = sub['high'].values
+    low = sub['low'].values
+    close = sub['close'].values
+    last_close = float(close[-1])
+    if last_close <= 0:
+        return None
+
+    # ATR
+    atr_val = None
+    if cfg is not None and _talib_available(cfg):
+        try:
+            atr_arr = talib.ATR(high, low, close, timeperiod=period)
+            if atr_arr is not None and len(atr_arr) > 0:
+                v = float(atr_arr[-1])
+                if np.isfinite(v) and v > 0:
+                    atr_val = v
+        except Exception:
+            pass
+    if atr_val is None:
+        # numpy Wilder ATR 末值
+        if len(close) < 2:
+            return None
+        prev_close = close[:-1]
+        tr_high = np.maximum(high[1:] - low[1:], np.abs(high[1:] - prev_close))
+        tr = np.maximum(tr_high, np.abs(low[1:] - prev_close))
+        if len(tr) < period:
+            return None
+        atr = float(tr[:period].mean())
+        for i in range(period, len(tr)):
+            atr = (atr * (period - 1) + float(tr[i])) / period
+        if atr <= 0 or not np.isfinite(atr):
+            return None
+        atr_val = atr
+
+    # MA
+    if len(close) < ma_period:
+        return None
+    ma_val = float(np.mean(close[-ma_period:]))
+    stop_line = ma_val - mult * atr_val
+    return {
+        'stop_line': round(stop_line, 4),
+        'ma_value': round(ma_val, 4),
+        'atr_value': round(atr_val, 4),
+        'close_today': round(last_close, 4),
+        'atr_stop_broken': bool(last_close < stop_line),
+    }
+

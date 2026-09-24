@@ -1,0 +1,161 @@
+{
+  "as_of": "2026-09-20",
+  "defensive": [
+    {
+      "name": "银行",
+      "defensive_score": 0.7,
+      "offensive_score": 0.5406679304469343,
+      "factors": {
+        "vol_60d": 0.17818704458107296,
+        "momentum_250d": 1.8292682926829285,
+        "amount_uptrend": false,
+        "val_pct": 0.0,
+        "div_yield": 4.24,
+        "today_change": -0.301,
+        "today_amount": 22905100000.0
+      },
+      "etf": {
+        "code": "sh.512800",
+        "name": "银行 ETF",
+        "baostock_code": "sh.512800",
+        "efinance_code": "512800",
+        "avg_amount": 907809901.45,
+        "fund_size": 54468594087.0,
+        "track_err": null
+      }
+    },
+    {
+      "name": "家用电器",
+      "defensive_score": 0.6979382436263689,
+      "offensive_score": 0.45747377321146726,
+      "factors": {
+        "vol_60d": 0.18369433089150577,
+        "momentum_250d": -10.392902408111537,
+        "amount_uptrend": false,
+        "val_pct": 0.0,
+        "div_yield": 4.24,
+        "today_change": null,
+        "today_amount": null
+      },
+      "etf": {
+        "code": "sz.159996",
+        "name": "家电 ETF",
+        "baostock_code": "sz.159996",
+        "efinance_code": "159996",
+        "avg_amount": 76204966.6674,
+        "fund_size": 4572298000.044001,
+        "track_err": null
+      }
+    },
+    {
+      "name": "钢铁",
+      "defensive_score": 0.6893335686922413,
+      "offensive_score": 0.3813841901710767,
+      "factors": {
+        "vol_60d": 0.2066788159046337,
+        "momentum_250d": -21.571330117160592,
+        "amount_uptrend": false,
+        "val_pct": 0.0,
+        "div_yield": 4.24,
+        "today_change": -0.566,
+        "today_amount": 5937560000.0
+      },
+      "etf": {
+        "code": "sh.515210",
+        "name": "钢铁 ETF",
+        "baostock_code": "sh.515210",
+        "efinance_code": "515210",
+        "avg_amount": 75278160.35,
+        "fund_size": 4516689621.0,
+        "track_err": null
+      }
+    }
+  ],
+  "offensive": [
+    {
+      "name": "美容护理",
+      "defensive_score": 0.6804824162906407,
+      "offensive_score": 0.7813411129498686,
+      "factors": {
+        "vol_60d": 0.23032168228609673,
+        "momentum_250d": -6.886517943743931,
+        "amount_uptrend": true,
+        "val_pct": 0.0,
+        "div_yield": 4.24,
+        "today_change": 0.565,
+        "today_amount": 2930780000.0
+      },
+      "etf": {
+        "code": "sz.159623",
+        "name": "医美 ETF",
+        "baostock_code": "sz.159623",
+        "efinance_code": "159623",
+        "avg_amount": null,
+        "fund_size": null,
+        "fallback": "low_liquidity",
+        "fallback_reason": "板块 美容护理 ETF 流动性不足，使用 159623 占位"
+      }
+    },
+    {
+      "name": "环保",
+      "defensive_score": 0.6857496251922923,
+      "offensive_score": 0.7401836046232722,
+      "factors": {
+        "vol_60d": 0.21625211138564754,
+        "momentum_250d": -12.93302540415704,
+        "amount_uptrend": true,
+        "val_pct": 0.0,
+        "div_yield": 4.24,
+        "today_change": null,
+        "today_amount": null
+      },
+      "etf": {
+        "code": "sh.512580",
+        "name": "环保 ETF",
+        "baostock_code": "sh.512580",
+        "efinance_code": "512580",
+        "avg_amount": null,
+        "fund_size": null,
+        "fallback": "low_liquidity",
+        "fallback_reason": "板块 环保 ETF 流动性不足，使用 512580 占位"
+      }
+    },
+    {
+      "name": "农林牧渔",
+      "defensive_score": 0.6672651904225324,
+      "offensive_score": 0.7378889102722714,
+      "factors": {
+        "vol_60d": 0.2656270403857705,
+        "momentum_250d": -13.27014218009479,
+        "amount_uptrend": true,
+        "val_pct": 0.0,
+        "div_yield": 4.24,
+        "today_change": null,
+        "today_amount": null
+      },
+      "etf": {
+        "code": "sz.159825",
+        "name": "农业 ETF",
+        "baostock_code": "sz.159825",
+        "efinance_code": "159825",
+        "avg_amount": 117444679.41339998,
+        "fund_size": 7046680764.803999,
+        "track_err": null
+      }
+    }
+  ],
+  "excluded": [],
+  "warnings": [
+    "建筑装饰: 行业历史行情不足，部分因子将填中位数",
+    "综合: 行业历史行情不足，部分因子将填中位数",
+    "vol_60d: 2 个板块缺失，已用中位数 0.2912 填充",
+    "momentum_250d: 2 个板块缺失，已用中位数 -17.5551 填充",
+    "val_pct: 31 个板块缺失，已用中位数 0.0000 填充"
+  ],
+  "factor_summary": {
+    "n_sectors_total": 31,
+    "n_excluded": 0,
+    "n_defensive": 3,
+    "n_offensive": 3
+  }
+}

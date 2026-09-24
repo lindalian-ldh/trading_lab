@@ -1,0 +1,9 @@
+[project]
+name = "trading-lab-barbell-system"
+version = "0.1.0"
+description = "哑铃策略配置与监控系统（最小化版）"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv]
+package = false

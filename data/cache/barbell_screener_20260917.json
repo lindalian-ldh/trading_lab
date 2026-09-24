@@ -1,0 +1,164 @@
+{
+  "as_of": "2026-09-17",
+  "defensive": [
+    {
+      "name": "银行",
+      "defensive_score": 0.7,
+      "offensive_score": 0.860873502377614,
+      "factors": {
+        "vol_60d": 0.17946178540723365,
+        "momentum_250d": 2.073170731707319,
+        "amount_uptrend": true,
+        "val_pct": 0.0,
+        "div_yield": 4.3,
+        "today_change": -0.301,
+        "today_amount": 22905100000.0
+      },
+      "etf": {
+        "code": "sh.512800",
+        "name": "银行 ETF",
+        "baostock_code": "sh.512800",
+        "efinance_code": "512800",
+        "avg_amount": 908915378.8,
+        "fund_size": 54534922728.0,
+        "track_err": null
+      }
+    },
+    {
+      "name": "家用电器",
+      "defensive_score": 0.6976776172526533,
+      "offensive_score": 0.46754282631835337,
+      "factors": {
+        "vol_60d": 0.18567401827864974,
+        "momentum_250d": -11.28010139416985,
+        "amount_uptrend": false,
+        "val_pct": 0.0,
+        "div_yield": 4.3,
+        "today_change": null,
+        "today_amount": null
+      },
+      "etf": {
+        "code": "sz.159996",
+        "name": "家电 ETF",
+        "baostock_code": "sz.159996",
+        "efinance_code": "159996",
+        "avg_amount": 78140252.60239999,
+        "fund_size": 4688415156.143999,
+        "track_err": null
+      }
+    },
+    {
+      "name": "石油石化",
+      "defensive_score": 0.6865256972324278,
+      "offensive_score": 0.38988964968454076,
+      "factors": {
+        "vol_60d": 0.21550472736749254,
+        "momentum_250d": -22.390317700453856,
+        "amount_uptrend": false,
+        "val_pct": 0.0,
+        "div_yield": 4.3,
+        "today_change": null,
+        "today_amount": null
+      },
+      "etf": {
+        "code": "sz.159745",
+        "name": "石化 ETF",
+        "baostock_code": "sz.159745",
+        "efinance_code": "159745",
+        "avg_amount": null,
+        "fund_size": null,
+        "fallback": "low_liquidity",
+        "fallback_reason": "板块 石油石化 ETF 流动性不足，使用 159745 占位"
+      }
+    }
+  ],
+  "offensive": [
+    {
+      "name": "美容护理",
+      "defensive_score": 0.6767139091113301,
+      "offensive_score": 0.7935056777554539,
+      "factors": {
+        "vol_60d": 0.24175066497742806,
+        "momentum_250d": -7.565470417070797,
+        "amount_uptrend": true,
+        "val_pct": 0.0,
+        "div_yield": 4.3,
+        "today_change": 0.565,
+        "today_amount": 2930780000.0
+      },
+      "etf": {
+        "code": "sz.159623",
+        "name": "医美 ETF",
+        "baostock_code": "sz.159623",
+        "efinance_code": "159623",
+        "avg_amount": null,
+        "fund_size": null,
+        "fallback": "low_liquidity",
+        "fallback_reason": "板块 美容护理 ETF 流动性不足，使用 159623 占位"
+      }
+    },
+    {
+      "name": "农林牧渔",
+      "defensive_score": 0.6678231872800107,
+      "offensive_score": 0.7503212496393599,
+      "factors": {
+        "vol_60d": 0.2655328061745412,
+        "momentum_250d": -13.744075829383885,
+        "amount_uptrend": true,
+        "val_pct": 0.0,
+        "div_yield": 4.3,
+        "today_change": null,
+        "today_amount": null
+      },
+      "etf": {
+        "code": "sz.159825",
+        "name": "农业 ETF",
+        "baostock_code": "sz.159825",
+        "efinance_code": "159825",
+        "avg_amount": 117991542.36840001,
+        "fund_size": 7079492542.104,
+        "track_err": null
+      }
+    },
+    {
+      "name": "环保",
+      "defensive_score": 0.6857243358977803,
+      "offensive_score": 0.7468430101925916,
+      "factors": {
+        "vol_60d": 0.2176483202919006,
+        "momentum_250d": -14.241724403387213,
+        "amount_uptrend": true,
+        "val_pct": 0.0,
+        "div_yield": 4.3,
+        "today_change": null,
+        "today_amount": null
+      },
+      "etf": {
+        "code": "sh.512580",
+        "name": "环保 ETF",
+        "baostock_code": "sh.512580",
+        "efinance_code": "512580",
+        "avg_amount": null,
+        "fund_size": null,
+        "fallback": "low_liquidity",
+        "fallback_reason": "板块 环保 ETF 流动性不足，使用 512580 占位"
+      }
+    }
+  ],
+  "excluded": [
+    "基础化工"
+  ],
+  "warnings": [
+    "建筑装饰: 行业历史行情不足，部分因子将填中位数",
+    "综合: 行业历史行情不足，部分因子将填中位数",
+    "vol_60d: 2 个板块缺失，已用中位数 0.2951 填充",
+    "momentum_250d: 2 个板块缺失，已用中位数 -18.4919 填充",
+    "val_pct: 31 个板块缺失，已用中位数 0.0000 填充"
+  ],
+  "factor_summary": {
+    "n_sectors_total": 31,
+    "n_excluded": 1,
+    "n_defensive": 3,
+    "n_offensive": 3
+  }
+}

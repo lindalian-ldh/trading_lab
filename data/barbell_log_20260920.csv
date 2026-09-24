@@ -1,0 +1,2 @@
+﻿date,mode,spread,correlation,zscore,score,regime,target_defensive,target_offensive,target_cash,rebalance_triggered,alert_info,defensive_sector,offensive_sector,screener_score,policy_flag
+2026-09-20,sector,2.5582,0.271,0.4907,1,防御偏高,0.7,0.30000000000000004,0.0,0,sector 模式无失效预警（1/7 条件成立）。,银行,农林牧渔,0.7,
