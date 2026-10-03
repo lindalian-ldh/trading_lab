@@ -83,9 +83,18 @@ class ScanConfig:
 
     # ===== 接口控制 =====
     request_interval: float = 2.0     # 请求间隔(秒)，zzshare 免费版 30次/分钟
-    timeout: int = 5                  # 单次请求超时(秒)
+    # 单次请求超时(秒)。2026-10-01 实测（8 次采样）：zzshare 的 plates_rank 端点带
+    # sdk-key 头时中位 **11.6s**、范围 6.8~26.2s（有长尾）；**同一 URL 不带该头仅 0.02s**。
+    # 原值 5s **必然超时**并触发 SDK 内部重试、白等 20~30s。
+    # 取 25s：覆盖到 25s；最坏情况（SDK max_retries=3 → 4 次尝试 + 14s 退避）单请求
+    # 114s，仍在流水线 subprocess 180s 预算内（余量 66s）。
+    # 若服务端修好 sdk-key 慢路径，可调回 10。
+    timeout: int = 25
     retry_times: int = 2              # 失败重试次数（不含首次）
-    overall_timeout: int = 90         # 整体扫描超时(秒)
+    # ⚠️ 未实现（dead config）：全仓库无任何代码引用，不起作用。
+    #    真正的整体时限来自调用方的 subprocess（run_leader_pipeline.py:125 timeout=180）。
+    #    scanner.py 文档里"整体超时：返回已完成部分"的说法与实现不符 —— 见 2026-10-01 记录。
+    overall_timeout: int = 90         # 整体扫描超时(秒)；**当前未被使用**
 
     # ===== 鉴权 =====
     token: str = ""                   # zzshare token，留空则从环境变量 ZZSHARE_TOKEN 读取
@@ -121,6 +130,6 @@ DEFAULT_CONFIG_DICT: dict = {
     "bottom_n": 10,
     "tier_size": 6,
     "request_interval": 2,
-    "timeout": 5,
+    "timeout": 25,
     "retry_times": 2,
 }

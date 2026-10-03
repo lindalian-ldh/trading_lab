@@ -193,9 +193,9 @@ api.market_plate_stocks(plate_code='885852', date1='2026-08-12',
 | `tier_min` | 3 | 每个梯队最小数量（不足时补足） |
 | `stock_limit` | 30 | 拉取成分股上限 |
 | `request_interval` | 2.0 | 请求间隔(秒)，zzshare 免费版 30次/分钟 |
-| `timeout` | 5 | 单次请求超时(秒) |
-| `retry_times` | 2 | 失败重试次数 |
-| `overall_timeout` | 90 | 整体扫描超时(秒) |
+| `timeout` | **25** | 单次请求超时(秒)。**2026-10-01 实测**（8 次采样）：`plates_rank` 带 `sdk-key` 头时中位 **11.6s**、范围 6.8~26.2s（**同一 URL 不带该头仅 0.02s**）。原值 5s **必然超时**。取 25s 后最坏单请求 114s，在流水线 180s 预算内 |
+| `retry_times` | 2 | 失败重试次数（另注：SDK 内部还有独立的 `max_retries=3`） |
+| `overall_timeout` | 90 | ⚠️ **未实现（dead config）** —— 全仓库无任何代码引用。真正的整体时限来自 `run_leader_pipeline.py:125` 的 `subprocess timeout=180`；`scanner.py` 文档中"整体超时：返回已完成部分"的说法与实现不符 |
 
 ## 六、限频与性能
 

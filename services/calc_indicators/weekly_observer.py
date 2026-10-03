@@ -37,6 +37,7 @@ import numpy as np
 import pandas as pd
 
 from config import TradingConfig
+from market_filter import _ensure_bs_login
 
 logger = logging.getLogger(__name__)
 
@@ -310,12 +311,10 @@ def _fetch_weekly_data(symbol: str, config: TradingConfig) -> Optional[pd.DataFr
         _debug("─── 尝试 baostock 日线聚合周线 ───", True)
     try:
         def _bs_daily_fetch():
-            import baostock as bs
-            bs.login()
-            try:
-                return _fetch_daily_baostock(bs_code, need_days)
-            finally:
-                bs.logout()
+            # 会话复用（见 market_filter._ensure_bs_login）：避免与大盘/维度E 重复登录
+            if not _ensure_bs_login():
+                return None
+            return _fetch_daily_baostock(bs_code, need_days)
         daily = _suppress_output(lambda: _with_timeout(_bs_daily_fetch, "baostock 日线"))
         if daily is not None and not daily.empty:
             weekly = _daily_to_weekly(daily).tail(bars).reset_index(drop=True)
@@ -357,12 +356,9 @@ def _fetch_weekly_data(symbol: str, config: TradingConfig) -> Optional[pd.DataFr
         _debug("─── 尝试 baostock 原生周线（备选） ───", True)
     try:
         def _bs_weekly_fetch():
-            import baostock as bs
-            bs.login()
-            try:
-                return _fetch_weekly_baostock(bs_code, bars)
-            finally:
-                bs.logout()
+            if not _ensure_bs_login():
+                return None
+            return _fetch_weekly_baostock(bs_code, bars)
         df = _suppress_output(lambda: _with_timeout(_bs_weekly_fetch, "baostock 周线"))
         if df is not None and not df.empty:
             logger.info("[D-周线观察] 数据来源: baostock 原生周线 (%s) %d 根", bs_code, len(df))

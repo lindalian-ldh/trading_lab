@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import atexit
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
@@ -42,6 +43,61 @@ def _debug(msg: str, enabled: bool = True) -> None:
 
 
 # ==================== 指数数据获取 ====================
+
+# ==================== baostock 会话复用 ====================
+
+_BS_LOGGED_IN: bool = False
+
+
+def _ensure_bs_login() -> bool:
+    """确保 baostock 已登录，并复用会话。返回是否可用。
+
+    为什么必须复用：bs.login() 是一次到 baostock 登录服务器的往返，
+    **新进程里实测要 ~15 秒**（同进程后续调用 0.2~3 秒）。
+    原先每个取数函数都 login/logout 一遍，于是
+      - 调用方超时必须设到 20s+ 才不至于被掐死（BENCHMARK_FETCH_TIMEOUT 默认才 5s，
+        所以大盘过滤长期处于"取数失败 → 直接否决"的静默失效状态）；
+      - 一次运行里 regime_detector 与 market_filter 各登录一遍，白等两次。
+    这里改成进程内只登录一次，用 atexit 兜底登出。
+    """
+    global _BS_LOGGED_IN
+    if _BS_LOGGED_IN:
+        return True
+    try:
+        import baostock as bs
+        if bs.login().error_code != "0":
+            return False
+        _BS_LOGGED_IN = True
+        return True
+    except Exception as e:  # pragma: no cover - 容灾兜底
+        logger.debug("baostock 登录失败: %s", e)
+        return False
+
+
+def _release_bs_session() -> None:
+    """进程退出时登出 baostock，避免留下 TCP 连接。
+
+    注意：logout 会往 stdout 打 "logout success!"，而 atexit 时机已晚于
+    各调用方的输出压制，所以这里必须自己压一次，否则会污染最后一行输出。
+    """
+    global _BS_LOGGED_IN
+    if not _BS_LOGGED_IN:
+        return
+
+    def _logout():
+        import baostock as bs
+        bs.logout()
+
+    try:
+        _suppress_output(_logout)
+    except Exception:  # pragma: no cover
+        pass
+    finally:
+        _BS_LOGGED_IN = False
+
+
+atexit.register(_release_bs_session)
+
 
 def _suppress_output(func):
     """复用 main.py 的输出压制工具，避免 baostock 登录信息污染控制台。"""
@@ -93,11 +149,22 @@ def _normalize_index_code(index_code: str) -> tuple:
 
 
 def _fetch_index_efinance(ef_code: str, days: int) -> Optional[pd.DataFrame]:
-    """使用 efinance 获取指数数据。"""
+    """使用 efinance 获取指数数据。
+
+    ⚠️ efinance 的指数代码格式：**纯 6 位数字**（如 '000001'、'399001'、'399006'），
+    不接受 'sh000001' / 'sh.000001'（会返回"证券代码可能有误"并给空数据）。
+    本函数做一次兜底转换：若传入带市场前缀的代码，自动剥离前缀。
+    """
     try:
         import efinance as ef
+        # 剥离 'sh'/'sz'/'sh.'/'1.' 等前缀，efinance 只认纯数字
+        code = ef_code.strip()
+        for prefix in ("sh.", "sz.", "sh", "sz", "1.", "0."):
+            if code.lower().startswith(prefix):
+                code = code[len(prefix):]
+                break
         # efinance 的 get_quote_history 同时支持个股与指数代码
-        df = ef.stock.get_quote_history(ef_code)
+        df = ef.stock.get_quote_history(code)
         if df is None or df.empty:
             return None
         col_map = {
@@ -115,6 +182,45 @@ def _fetch_index_efinance(ef_code: str, days: int) -> Optional[pd.DataFrame]:
         return df[["date", "open", "high", "low", "close", "volume"]]
     except Exception as e:
         logger.debug("efinance 获取指数 %s 失败: %s", ef_code, e)
+        return None
+
+
+def _fetch_index_tencent(tx_code: str, days: int) -> Optional[pd.DataFrame]:
+    """用 akshare 的**腾讯源**取指数日线（保留 sh/sz 前缀，无代码歧义）。
+
+    为什么需要这个源（2026-10-01 加）：
+
+      · **baostock 没有科创50** —— `sh.000688` 查询返回空。
+      · **efinance 对 000688 有歧义** —— 它只认纯 6 位数字，故 _fetch_index_efinance
+        会剥掉前缀；而 `000688` 会解析成**深市个股「国城矿业」**。科创50 应是
+        1000+ 点、个股是几元 —— 一旦东财通道恢复，这条路径可能**静默返回个股数据**，
+        把市场状态建立在一只小盘股上。这是比取数失败更糟的失效模式。
+      · **腾讯是非东财供应商** —— 东财通道（efinance / akshare_em）在本机间歇
+        ProxyError，换供应商可规避。
+
+    腾讯源用显式 `sh000688` / `sz399006` 形式，不存在上述歧义。
+    任何失败返回 None（调用方继续降级），绝不向 A/B/C 抛异常。
+    """
+    try:
+        import akshare as ak
+        df = _suppress_output(lambda: ak.stock_zh_index_daily_tx(symbol=tx_code))
+        if df is None or df.empty:
+            return None
+        col_map = {"日期": "date", "开盘": "open", "最高": "high",
+                   "最低": "low", "收盘": "close", "成交量": "volume"}
+        df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+        if "date" not in df.columns:
+            return None
+        df["date"] = pd.to_datetime(df["date"])
+        for col in ("open", "high", "low", "close", "volume"):
+            if col not in df.columns:
+                df[col] = 0.0
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        df = df.dropna(subset=["close"]).sort_values("date")
+        df = df.tail(days).reset_index(drop=True)
+        return df[["date", "open", "high", "low", "close", "volume"]] if not df.empty else None
+    except Exception as e:
+        logger.debug("腾讯源获取指数 %s 失败: %s", tx_code, e)
         return None
 
 
@@ -150,84 +256,124 @@ def _fetch_index_baostock(bs_code: str, days: int) -> Optional[pd.DataFrame]:
         return None
 
 
-def _fetch_index(index_code: str, days: int, timeout: int, dbg: bool = False) -> Optional[pd.DataFrame]:
-    """获取指数日线数据：efinance 优先，baostock 兜底。带超时降级。
+def _fetch_index(index_code: str, days: int, timeout: int, dbg: bool = False,
+                 prefer: str = "efinance") -> Optional[pd.DataFrame]:
+    """获取指数日线数据：默认 efinance 优先，baostock 兜底。带超时降级。
 
     Args:
         index_code: 指数代码，如 'sh000001'
         days: 拉取的天数
         timeout: 单数据源超时秒数
         dbg: 是否打印详细排查日志
+        prefer: 首选数据源，"efinance" 或 "baostock"。
+            调用方可指定 baostock 优先：baostock 的指数查询需 ~20s（冷启动），
+            efinance 在本机 TLS 不可用时也会先耗尽超时，先试死源纯属浪费。
     """
     ef_code, bs_code = _normalize_index_code(index_code)
     if dbg:
         _debug("══════ 大盘数据获取排查 ══════", True)
         _debug(f"输入指数代码: {index_code}  →  efinance: {ef_code}  |  baostock: {bs_code}", True)
-        _debug(f"拉取天数: {days}  |  单源超时: {timeout}s", True)
+        _debug(f"拉取天数: {days}  |  单源超时: {timeout}s  |  首选: {prefer}", True)
 
-    # —— efinance ——
-    if dbg:
-        _debug("─── 尝试 efinance ───", True)
-    try:
-        import signal as sig
-        def _handler(signum, frame):
-            raise TimeoutError("efinance 超时")
-        sig.signal(sig.SIGALRM, _handler)
-        sig.alarm(timeout)
+    def _try_efinance_source():
+        if dbg:
+            _debug("─── 尝试 efinance ───", True)
         try:
-            df = _suppress_output(lambda: _fetch_index_efinance(ef_code, days))
-        finally:
-            sig.alarm(0)
-        if df is not None and not df.empty:
-            logger.info("大盘指数数据来源: efinance (%s)", ef_code)
-            if dbg:
-                _debug(f"✅ efinance 成功: {len(df)} 根 K 线", True)
-                _debug(f"   日期范围: {df['date'].iloc[0].date()} ~ {df['date'].iloc[-1].date()}", True)
-                _debug(f"   最新收盘: {df['close'].iloc[-1]:.2f}", True)
-            return df
-        else:
+            import signal as sig
+            def _handler(signum, frame):
+                raise TimeoutError("efinance 超时")
+            sig.signal(sig.SIGALRM, _handler)
+            sig.alarm(timeout)
+            try:
+                df = _suppress_output(lambda: _fetch_index_efinance(ef_code, days))
+            finally:
+                sig.alarm(0)
+            if df is not None and not df.empty:
+                logger.info("大盘指数数据来源: efinance (%s)", ef_code)
+                if dbg:
+                    _debug(f"✅ efinance 成功: {len(df)} 根 K 线", True)
+                    _debug(f"   日期范围: {df['date'].iloc[0].date()} ~ {df['date'].iloc[-1].date()}", True)
+                    _debug(f"   最新收盘: {df['close'].iloc[-1]:.2f}", True)
+                return df
             if dbg:
                 _debug("❌ efinance 返回空数据", True)
-    except Exception as e:
-        if dbg:
-            _debug(f"❌ efinance 失败: {type(e).__name__}: {e}", True)
-        logger.info("efinance 获取指数失败: %s", e)
-
-    # —— baostock 兜底 ——
-    if dbg:
-        _debug("─── 尝试 baostock 兜底 ───", True)
-    try:
-        import signal as sig
-        def _handler2(signum, frame):
-            raise TimeoutError("baostock 超时")
-        sig.signal(sig.SIGALRM, _handler2)
-        sig.alarm(timeout)
-
-        def _bs_fetch():
-            import baostock as bs
-            bs.login()
-            try:
-                return _fetch_index_baostock(bs_code, days)
-            finally:
-                bs.logout()
-        try:
-            df = _suppress_output(_bs_fetch)
-        finally:
-            sig.alarm(0)
-        if df is not None and not df.empty:
-            logger.info("大盘指数数据来源: baostock (%s)", bs_code)
+        except Exception as e:
             if dbg:
-                _debug(f"✅ baostock 成功: {len(df)} 根 K 线", True)
-                _debug(f"   日期范围: {df['date'].iloc[0].date()} ~ {df['date'].iloc[-1].date()}", True)
-                _debug(f"   最新收盘: {df['close'].iloc[-1]:.2f}", True)
-            return df
-        else:
+                _debug(f"❌ efinance 失败: {type(e).__name__}: {e}", True)
+            logger.info("efinance 获取指数失败: %s", e)
+        return None
+
+    def _try_baostock_source():
+        if dbg:
+            _debug("─── 尝试 baostock ───", True)
+        try:
+            import signal as sig
+            def _handler2(signum, frame):
+                raise TimeoutError("baostock 超时")
+            sig.signal(sig.SIGALRM, _handler2)
+            sig.alarm(timeout)
+
+            def _bs_fetch():
+                if not _ensure_bs_login():
+                    return None
+                return _fetch_index_baostock(bs_code, days)
+            try:
+                df = _suppress_output(_bs_fetch)
+            finally:
+                sig.alarm(0)
+            if df is not None and not df.empty:
+                logger.info("大盘指数数据来源: baostock (%s)", bs_code)
+                if dbg:
+                    _debug(f"✅ baostock 成功: {len(df)} 根 K 线", True)
+                    _debug(f"   日期范围: {df['date'].iloc[0].date()} ~ {df['date'].iloc[-1].date()}", True)
+                    _debug(f"   最新收盘: {df['close'].iloc[-1]:.2f}", True)
+                return df
             if dbg:
                 _debug("❌ baostock 返回空数据", True)
-    except Exception as e:
+        except Exception as e:
+            if dbg:
+                _debug(f"❌ baostock 失败: {type(e).__name__}: {e}", True)
+            logger.info("baostock 获取指数失败: %s", e)
+        return None
+
+    def _try_tencent_source():
         if dbg:
-            _debug(f"❌ baostock 失败: {type(e).__name__}: {e}", True)
-        logger.info("baostock 获取指数失败: %s", e)
+            _debug("─── 尝试 腾讯(akshare) ───", True)
+        try:
+            import signal as sig
+            def _handler3(signum, frame):
+                raise TimeoutError("腾讯源超时")
+            sig.signal(sig.SIGALRM, _handler3)
+            sig.alarm(timeout)
+            try:
+                df = _fetch_index_tencent(index_code, days)
+            finally:
+                sig.alarm(0)
+            if df is not None and not df.empty:
+                logger.info("大盘指数数据来源: 腾讯 (%s)", index_code)
+                if dbg:
+                    _debug(f"✅ 腾讯成功: {len(df)} 根 K 线", True)
+                    _debug(f"   日期范围: {df['date'].iloc[0].date()} ~ {df['date'].iloc[-1].date()}", True)
+                    _debug(f"   最新收盘: {df['close'].iloc[-1]:.2f}", True)
+                return df
+            if dbg:
+                _debug("❌ 腾讯返回空数据", True)
+        except Exception as e:
+            if dbg:
+                _debug(f"❌ 腾讯失败: {type(e).__name__}: {e}", True)
+            logger.info("腾讯源获取指数失败: %s", e)
+        return None
+
+    # —— 按 prefer 决定尝试顺序 ——
+    # 腾讯排在 efinance 之前：它用显式 sh/sz 前缀（无 000688 歧义），
+    # 且是非东财供应商（东财通道在本机间歇 ProxyError）。
+    order = [_try_baostock_source, _try_tencent_source, _try_efinance_source]
+    if prefer != "baostock":
+        order = [_try_efinance_source, _try_baostock_source, _try_tencent_source]
+    for fetch in order:
+        df = fetch()
+        if df is not None and not df.empty:
+            return df
 
     if dbg:
         _debug("❌ 所有数据源均失败，返回 None", True)
@@ -286,6 +432,7 @@ def check_market_environment(config: TradingConfig) -> dict:
         config.BENCHMARK_FETCH_DAYS,
         config.BENCHMARK_FETCH_TIMEOUT,
         dbg=dbg,
+        prefer=getattr(config, "BENCHMARK_PREFER_SOURCE", "efinance"),
     )
 
     if df is None or df.empty:
