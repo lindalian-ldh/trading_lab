@@ -32,6 +32,12 @@
   本模块因此把 ``volume`` 留为 ``NaN`` 而**不填 0** ——
   填 0 会让下游把"没有数据"误当成"成交量为零"（本仓库明确反对这类静默失效）。
   需要成交额时请用 ``amount`` 列。
+- **equity 默认前复权**（2026-10-04 P0.4 追加）：腾讯的 ETF/个股日线**不含复权**，
+  份额折算会留下断崖（实测 512480 在 2021-03-29 单日 −48.90%），
+  足以把两只同质半导体 ETF 的相关性从 0.990 压到 0.666。
+  ``fetch_history(kind='equity')`` 默认 ``adjust=True`` 做前复权，并把检测到的事件
+  打 WARNING + 挂到 ``df.attrs['corporate_actions']``；**指数不复权**。
+  **缓存里始终存原始未复权价**，复权只在读出时进行。
 
 ## 用法
 
@@ -239,6 +245,128 @@ def merge_history(cached: Optional[pd.DataFrame],
 
 
 # ====================================================================
+# 企业行为（份额折算 / 拆分 / 合并 / 送转股）—— 未复权断崖的修复
+# ====================================================================
+#
+# ⚠️ 这是 2026-10-04 P0.4 实测发现的一个**会毁掉全部 ETF 对照检验**的问题：
+#   腾讯的 ETF/个股日线是**未复权**的，份额折算（拆分/合并）会在序列里留下断崖。
+#
+#   实测证据（本仓库缓存数据）：
+#     · sh512480 半导体ETF  2021-03-29 单日 **−48.90%**、2026-07-03 单日 **−50.70%**
+#     · sh512760 芯片ETF    2020-09-10 单日 **+53.10%**、2026-03-27 单日 **+49.75%**
+#   后果：两只几乎同质的半导体 ETF（512480 vs 512760）日收益相关性
+#         **原始 0.666 → 剔除断崖后 0.990**。
+#   若不修，P0.4 的"合成指数 vs ETF 相关性 ≥0.8"验收会**把达标的东西判成不达标**
+#   （512480 vs 国证半导体芯片 0.683 → 0.831；561310 消费电子 0.712 → 0.909）。
+
+# A 股与 ETF 的单日涨跌幅上限为 20%（科创板/创业板注册制 ±20%，其余 ±10%）。
+# 因此单日 |收益| 超过 22% **只可能**来自企业行为 —— 除非该标的没有涨跌幅限制
+# （部分跨境 ETF / 退市整理股），故检测结果**必须显式打印供人工复核**，不许静默处理。
+CORPORATE_ACTION_THRESHOLD = 0.22
+
+CA_COLUMNS: tuple = ("date", "prev_date", "prev_close", "close", "factor", "ret")
+
+
+def detect_corporate_actions(df: pd.DataFrame,
+                             *,
+                             threshold: float = CORPORATE_ACTION_THRESHOLD) -> pd.DataFrame:
+    """检测未复权序列中疑似**企业行为**造成的断崖。
+
+    判据：单日 ``|收益| > threshold``（默认 22%，高于单日涨跌幅上限 20%）。
+
+    Returns:
+        DataFrame（列 :data:`CA_COLUMNS`，按日期升序）；无事件时返回**空表**（不是 None）。
+        ``factor = close_t / prev_close`` —— 把事件日**之前**的价格乘以它即可与事件日连续
+        （份额拆分 ⇒ factor < 1；份额合并 / 送转 ⇒ factor > 1）。
+
+    ⚠️ 真实崩溃若超过涨跌幅限制，说明该标的**没有**涨跌幅限制 ⇒ 本函数会误报。
+       所以事件必须由调用方打印出来人工复核，**绝不允许静默复权**。
+    """
+    if df is None or df.empty or "close" not in df.columns:
+        return pd.DataFrame(columns=list(CA_COLUMNS))
+    d = df[["date", "close"]].copy()
+    d["date"] = pd.to_datetime(d["date"], errors="coerce")
+    d["close"] = pd.to_numeric(d["close"], errors="coerce")
+    d = d.dropna(subset=["date", "close"]).sort_values("date").reset_index(drop=True)
+    if len(d) < 2:
+        return pd.DataFrame(columns=list(CA_COLUMNS))
+    d["prev_date"] = d["date"].shift(1)
+    d["prev_close"] = d["close"].shift(1)
+    # prev_close = 0 不可能出现（价格为 0 的日线已被上游剔除），除法安全
+    d["factor"] = d["close"] / d["prev_close"]
+    d["ret"] = d["factor"] - 1.0
+    ev = d[d["ret"].abs() > float(threshold)].dropna(subset=["prev_close", "factor"])
+    return ev[list(CA_COLUMNS)].reset_index(drop=True)
+
+
+def adjust_corporate_actions(df: pd.DataFrame,
+                             *,
+                             threshold: float = CORPORATE_ACTION_THRESHOLD,
+                             events: Optional[pd.DataFrame] = None):
+    """前复权（以**最新价**为锚）修复企业行为断崖。
+
+    返回 ``(adjusted_df, events)``：
+
+    - ``open/high/low/close`` 乘以该行的累积复权因子；``volume/amount/turnover``
+      **保持原值** —— 份额折算不改变成交额，因此"复权价 × 未复权量 ≠ 成交额"
+      是**预期行为**，不是 bug。
+    - 新增列 ``adj_factor``（该行累积因子；最新一段恒为 1.0）。
+    - ``events`` 为 :func:`detect_corporate_actions` 的结果（可外部传入以避免重复计算）。
+
+    ⚠️ 指数**不需要**复权，调用方只应对 equity 使用。
+    """
+    if df is None or df.empty:
+        return df, pd.DataFrame(columns=list(CA_COLUMNS))
+    if events is None:
+        events = detect_corporate_actions(df, threshold=threshold)
+
+    out = df.copy()
+    out["date"] = pd.to_datetime(out["date"], errors="coerce")
+    out = out.sort_values("date").reset_index(drop=True)
+
+    cum = pd.Series(1.0, index=out.index, dtype="float64")
+    if events is not None and not events.empty:
+        for _, e in events.sort_values("date").iterrows():
+            mask = out["date"] < pd.Timestamp(e["date"])
+            cum.loc[mask] = cum.loc[mask] * float(e["factor"])
+
+    out["adj_factor"] = cum
+    for col in ("open", "high", "low", "close"):
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce") * cum
+
+    ordered = [c for c in (list(OHLCV_COLUMNS) + ["adj_factor"]) if c in out.columns]
+    return out[ordered].reset_index(drop=True), events.reset_index(drop=True)
+
+
+def _finalize(df: Optional[pd.DataFrame],
+              *,
+              kind: str,
+              adjust: bool,
+              tx_code: str,
+              bars: Optional[int]) -> Optional[pd.DataFrame]:
+    """统一收尾：equity 可选前复权 → 切片。事件挂在 ``df.attrs['corporate_actions']``。"""
+    if df is None or df.empty:
+        return df
+    events = None
+    if adjust and kind == KIND_EQUITY:
+        df, events = adjust_corporate_actions(df)
+        if events is not None and not events.empty:
+            logger.warning(
+                "检测到 %d 处疑似企业行为（未复权断崖），已按前复权修复: %s —— "
+                "请人工复核是否为份额折算/拆分。", len(events), tx_code)
+            for _, e in events.iterrows():
+                logger.warning(
+                    "    %s 前收 %.4f → 收 %.4f（%+.2f%%，因子 %.4f）",
+                    pd.Timestamp(e["date"]).date(), float(e["prev_close"]),
+                    float(e["close"]), 100 * float(e["ret"]), float(e["factor"]))
+    out = _slice(df, bars)
+    if events is not None and not events.empty and out is not None:
+        out.attrs["corporate_actions"] = events
+    return out
+
+
+# ====================================================================
 # 腾讯源取数（唯一的网络入口）
 # ====================================================================
 
@@ -278,6 +406,7 @@ def fetch_history(code: str,
                   prefer_cache: bool = False,
                   allow_stale: bool = True,
                   strict: bool = False,
+                  adjust: bool = True,
                   cache_dir: Optional[Path] = None) -> Optional[pd.DataFrame]:
     """取日线历史（含缓存合并）。这是本模块的主入口。
 
@@ -292,11 +421,16 @@ def fetch_history(code: str,
             **日频决策（如 regime 判定）应传 False** —— 宁可判定为"不可用"，
             也不要基于过期数据给出"安全"的错误结论。
         strict: True 时取数失败抛 ``MarketDataError``；False 时返回 None + WARNING。
+        adjust: **仅对 equity 生效**。True（默认）时做前复权，修掉腾讯源的
+            企业行为断崖（份额折算/拆分；实测 512480 在 2021-03-29 单日 −48.9%）。
+            检测到的事件会打 WARNING、并挂在返回值的 ``df.attrs['corporate_actions']``。
+            **指数不需要复权**，kind='index' 时本参数被忽略。
+            缓存里存的**始终是原始未复权价**，复权在读出时进行（可复现、可改口径）。
         cache_dir: 覆盖缓存目录（测试用）。
 
     Returns:
-        列 ``date/open/high/low/close/volume/amount/turnover`` 的 DataFrame（升序），
-        或 None（失败且 strict=False）。
+        列 ``date/open/high/low/close/volume/amount/turnover``（equity 且 adjust=True 时
+        追加 ``adj_factor``）的 DataFrame（升序），或 None（失败且 strict=False）。
     """
     k = resolve_kind(code, kind)
     tx = normalize_tx_code(code, kind=k)
@@ -306,7 +440,7 @@ def fetch_history(code: str,
     # —— 离线快路径 ——
     if prefer_cache and not refresh:
         if cached is not None:
-            return _slice(cached, bars)
+            return _finalize(cached, kind=k, adjust=adjust, tx_code=tx, bars=bars)
         logger.warning("prefer_cache=True 但缓存不存在/不可用: %s", path)
 
     # —— 联网取全量 ——
@@ -327,7 +461,7 @@ def fetch_history(code: str,
                 "请勿在此数据上做日频决策。",
                 tx, k, reason, last, len(cached),
             )
-            return _slice(cached, bars)
+            return _finalize(cached, kind=k, adjust=adjust, tx_code=tx, bars=bars)
         msg = f"腾讯源取数失败 {tx}({k}): {reason}"
         if strict:
             raise MarketDataError(msg)
@@ -344,7 +478,7 @@ def fetch_history(code: str,
 
     if not prefer_cache:
         save_cache(path, merged)
-    return _slice(merged, bars)
+    return _finalize(merged, kind=k, adjust=adjust, tx_code=tx, bars=bars)
 
 
 def fetch_index_history(code: str, **kwargs) -> Optional[pd.DataFrame]:
@@ -414,6 +548,8 @@ __all__ = [
     "KIND_INDEX",
     "KIND_EQUITY",
     "OHLCV_COLUMNS",
+    "CA_COLUMNS",
+    "CORPORATE_ACTION_THRESHOLD",
     "CACHE_DIR",
     "normalize_tx_code",
     "resolve_kind",
@@ -421,6 +557,8 @@ __all__ = [
     "load_cache",
     "save_cache",
     "merge_history",
+    "detect_corporate_actions",
+    "adjust_corporate_actions",
     "fetch_history",
     "fetch_index_history",
     "fetch_equity_history",

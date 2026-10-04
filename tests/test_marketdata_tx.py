@@ -307,3 +307,131 @@ def test_describe_cache_reports_coverage_and_parse_errors(cache_dir):
     assert bool(row["cached"]) is True and row["rows"] == 2
     assert bool(out[out["code"] == "sh600000"].iloc[0]["cached"]) is False
     assert "无法解析" in out[out["code"] == "garbage"].iloc[0]["path"]
+
+
+# ====================================================================
+# 企业行为（份额折算/拆分）检测与前复权
+# —— 2026-10-04 P0.4 实测：未复权断崖会把 0.990 的相关性压到 0.666
+# ====================================================================
+
+def _mk_split_frame():
+    """构造一段含 1:2 份额折算（−50%）的 ETF 序列。"""
+    return m._reindex_columns(_mk(
+        ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09"],
+        [2.00, 2.10, 1.05, 1.08, 1.06],        # 01-07 折算：2.10 → 1.05（−50%）
+    ))
+
+
+def test_detect_corporate_actions_finds_split():
+    ev = m.detect_corporate_actions(_mk_split_frame())
+    assert len(ev) == 1
+    row = ev.iloc[0]
+    assert pd.Timestamp(row["date"]) == pd.Timestamp("2026-01-07")
+    assert row["prev_close"] == pytest.approx(2.10)
+    assert row["close"] == pytest.approx(1.05)
+    assert row["factor"] == pytest.approx(0.5)
+    assert row["ret"] == pytest.approx(-0.5)
+    assert list(ev.columns) == list(m.CA_COLUMNS)
+
+
+def test_detect_corporate_actions_ignores_legal_moves():
+    """±10%（主板）与 ±20%（双创）都在涨跌幅限制内，**不得**被误判为企业行为。"""
+    legal = m._reindex_columns(_mk(
+        ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08"],
+        [1.00, 1.20, 0.96, 1.10],              # +20% / −20% / +14.6%
+    ))
+    assert m.detect_corporate_actions(legal).empty
+
+
+def test_detect_corporate_actions_edge_cases():
+    assert m.detect_corporate_actions(None).empty
+    assert m.detect_corporate_actions(pd.DataFrame()).empty
+    assert m.detect_corporate_actions(_mk(["2026-01-05"], [1.0])).empty
+
+
+def test_adjust_makes_series_continuous_and_keeps_tail():
+    df = _mk_split_frame()
+    adj, ev = m.adjust_corporate_actions(df)
+    assert len(ev) == 1
+    # 折算当日及之后保持原价（前复权以最新价为锚）
+    assert adj["close"].iloc[-1] == pytest.approx(1.06)
+    # 折算日之前的收盘价乘以 0.5 → 与折算日连续
+    assert adj["close"].tolist()[:2] == pytest.approx([1.00, 1.05])
+    # 全部日收益都回到涨跌幅限制内
+    assert float(adj["close"].pct_change().abs().max()) < m.CORPORATE_ACTION_THRESHOLD
+    assert adj["adj_factor"].tolist() == pytest.approx([0.5, 0.5, 1.0, 1.0, 1.0])
+
+
+def test_adjust_scales_only_ohlc_not_volume_or_amount():
+    """份额折算不改变成交额 ⇒ volume/amount 保持原值（复权价 × 未复权量 ≠ 成交额）。"""
+    raw = pd.DataFrame({
+        "date": pd.to_datetime(["2026-01-05", "2026-01-06"]),
+        "open": [2.0, 1.0], "high": [2.1, 1.05], "low": [1.9, 0.98],
+        "close": [2.0, 1.0], "volume": [100.0, 250.0], "amount": [20000.0, 25000.0],
+    })
+    adj, ev = m.adjust_corporate_actions(m._reindex_columns(raw))
+    assert len(ev) == 1
+    assert adj["volume"].tolist() == [100.0, 250.0]
+    assert adj["amount"].tolist() == [20000.0, 25000.0]
+    assert adj["close"].tolist() == pytest.approx([1.0, 1.0])
+
+
+def test_adjust_without_events_adds_identity_factor():
+    df = m._reindex_columns(_mk(["2026-01-05", "2026-01-06"], [1.0, 1.1]))
+    adj, ev = m.adjust_corporate_actions(df)
+    assert ev.empty
+    assert adj["adj_factor"].tolist() == [1.0, 1.0]
+    assert adj["close"].tolist() == pytest.approx([1.0, 1.1])
+
+
+def test_adjust_uses_supplied_events_without_recomputing():
+    df = _mk_split_frame()
+    ev = m.detect_corporate_actions(df)
+    adj, ev2 = m.adjust_corporate_actions(df, events=ev)
+    assert len(ev2) == len(ev) == 1
+
+
+def test_fetch_equity_adjusts_by_default_and_reports_events(cache_dir, monkeypatch, caplog):
+    monkeypatch.setattr(m, "_fetch_raw_tx", lambda k, c: _mk_split_frame())
+    with caplog.at_level(logging.WARNING):
+        out = m.fetch_equity_history("sh512480", cache_dir=cache_dir)
+    assert "adj_factor" in out.columns
+    assert len(out.attrs["corporate_actions"]) == 1
+    assert any("企业行为" in r.message for r in caplog.records)
+
+
+def test_fetch_equity_adjust_false_keeps_raw(cache_dir, monkeypatch):
+    monkeypatch.setattr(m, "_fetch_raw_tx", lambda k, c: _mk_split_frame())
+    out = m.fetch_equity_history("sh512480", cache_dir=cache_dir, adjust=False)
+    assert "adj_factor" not in out.columns
+    assert out["close"].tolist() == pytest.approx([2.00, 2.10, 1.05, 1.08, 1.06])
+
+
+def test_fetch_equity_cache_stores_raw_and_adjusts_on_read(cache_dir, monkeypatch):
+    """缓存必须存**原始未复权价**，复权在读出时进行（否则改口径就要重刷全部缓存）。"""
+    monkeypatch.setattr(m, "_fetch_raw_tx", lambda k, c: _mk_split_frame())
+    m.fetch_equity_history("sh512480", cache_dir=cache_dir)
+    raw = m.load_cache(m.cache_path(m.KIND_EQUITY, "sh512480", cache_dir=cache_dir))
+    assert "adj_factor" not in raw.columns
+    assert raw["close"].iloc[2] == pytest.approx(1.05)
+    # 离线快路径同样复权
+    out = m.fetch_equity_history("sh512480", cache_dir=cache_dir, prefer_cache=True)
+    assert out["close"].iloc[0] == pytest.approx(1.00)
+
+
+def test_fetch_index_is_never_adjusted(cache_dir, monkeypatch):
+    """指数不需要复权：即便出现 +50% 的假断点也不得被改写。"""
+    monkeypatch.setattr(m, "_fetch_raw_tx", lambda k, c: m._reindex_columns(_mk(
+        ["2026-01-05", "2026-01-06"], [1000.0, 1500.0])))
+    out = m.fetch_index_history("sh000001", cache_dir=cache_dir)
+    assert "adj_factor" not in out.columns
+    assert out["close"].tolist() == pytest.approx([1000.0, 1500.0])
+
+
+def test_fetch_equity_bars_slice_happens_after_adjustment(cache_dir, monkeypatch):
+    """先全序列复权、后切片 —— 否则切片后再算累积因子会算错。"""
+    monkeypatch.setattr(m, "_fetch_raw_tx", lambda k, c: _mk_split_frame())
+    out = m.fetch_equity_history("sh512480", cache_dir=cache_dir, bars=2)
+    assert len(out) == 2
+    assert out["adj_factor"].tolist() == [1.0, 1.0]
+    assert out["close"].tolist() == pytest.approx([1.08, 1.06])

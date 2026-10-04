@@ -1,0 +1,382 @@
+[
+  {
+    "theme": "半导体设备",
+    "index": "sz399363",
+    "anchor": "sz399006",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 40,
+        "per_year": 5.01
+      },
+      "L2": {
+        "episodes": 16,
+        "per_year": 2.0
+      },
+      "RS": {
+        "episodes": 59,
+        "per_year": 7.39
+      },
+      "L1+L2": {
+        "episodes": 3,
+        "per_year": 0.38
+      },
+      "L1+L2+RS": {
+        "episodes": 2,
+        "per_year": 0.25
+      }
+    },
+    "day_share": {
+      "L1": 0.181,
+      "L2": 0.008,
+      "RS": 0.294,
+      "L1+L2": 0.002,
+      "L1+L2+RS": 0.001
+    },
+    "note": "❌ 联合频次 0.38 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "半导体设备材料",
+    "index": "sz399363",
+    "anchor": "sz399006",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 40,
+        "per_year": 5.01
+      },
+      "L2": {
+        "episodes": 16,
+        "per_year": 2.0
+      },
+      "RS": {
+        "episodes": 59,
+        "per_year": 7.39
+      },
+      "L1+L2": {
+        "episodes": 3,
+        "per_year": 0.38
+      },
+      "L1+L2+RS": {
+        "episodes": 2,
+        "per_year": 0.25
+      }
+    },
+    "day_share": {
+      "L1": 0.181,
+      "L2": 0.008,
+      "RS": 0.294,
+      "L1+L2": 0.002,
+      "L1+L2+RS": 0.001
+    },
+    "note": "❌ 联合频次 0.38 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "芯片",
+    "index": "sz399363",
+    "anchor": "sz399006",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 40,
+        "per_year": 5.01
+      },
+      "L2": {
+        "episodes": 16,
+        "per_year": 2.0
+      },
+      "RS": {
+        "episodes": 59,
+        "per_year": 7.39
+      },
+      "L1+L2": {
+        "episodes": 3,
+        "per_year": 0.38
+      },
+      "L1+L2+RS": {
+        "episodes": 2,
+        "per_year": 0.25
+      }
+    },
+    "day_share": {
+      "L1": 0.181,
+      "L2": 0.008,
+      "RS": 0.294,
+      "L1+L2": 0.002,
+      "L1+L2+RS": 0.001
+    },
+    "note": "❌ 联合频次 0.38 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "第三代半导体",
+    "index": "sz399363",
+    "anchor": "sz399006",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 40,
+        "per_year": 5.01
+      },
+      "L2": {
+        "episodes": 16,
+        "per_year": 2.0
+      },
+      "RS": {
+        "episodes": 59,
+        "per_year": 7.39
+      },
+      "L1+L2": {
+        "episodes": 3,
+        "per_year": 0.38
+      },
+      "L1+L2+RS": {
+        "episodes": 2,
+        "per_year": 0.25
+      }
+    },
+    "day_share": {
+      "L1": 0.181,
+      "L2": 0.008,
+      "RS": 0.294,
+      "L1+L2": 0.002,
+      "L1+L2+RS": 0.001
+    },
+    "note": "❌ 联合频次 0.38 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "云计算与大数据",
+    "index": "sh000998",
+    "anchor": "sz399006",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 39,
+        "per_year": 4.89
+      },
+      "L2": {
+        "episodes": 17,
+        "per_year": 2.13
+      },
+      "RS": {
+        "episodes": 68,
+        "per_year": 8.52
+      },
+      "L1+L2": {
+        "episodes": 7,
+        "per_year": 0.88
+      },
+      "L1+L2+RS": {
+        "episodes": 5,
+        "per_year": 0.63
+      }
+    },
+    "day_share": {
+      "L1": 0.189,
+      "L2": 0.009,
+      "RS": 0.269,
+      "L1+L2": 0.004,
+      "L1+L2+RS": 0.003
+    },
+    "note": "❌ 联合频次 0.88 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "消费电子",
+    "index": "sh000998",
+    "anchor": "sz399006",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 39,
+        "per_year": 4.89
+      },
+      "L2": {
+        "episodes": 17,
+        "per_year": 2.13
+      },
+      "RS": {
+        "episodes": 68,
+        "per_year": 8.52
+      },
+      "L1+L2": {
+        "episodes": 7,
+        "per_year": 0.88
+      },
+      "L1+L2+RS": {
+        "episodes": 5,
+        "per_year": 0.63
+      }
+    },
+    "day_share": {
+      "L1": 0.189,
+      "L2": 0.009,
+      "RS": 0.269,
+      "L1+L2": 0.004,
+      "L1+L2+RS": 0.003
+    },
+    "note": "❌ 联合频次 0.88 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "电网设备",
+    "index": "sz399808",
+    "anchor": "sh000001",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 40,
+        "per_year": 5.01
+      },
+      "L2": {
+        "episodes": 11,
+        "per_year": 1.38
+      },
+      "RS": {
+        "episodes": 58,
+        "per_year": 7.26
+      },
+      "L1+L2": {
+        "episodes": 4,
+        "per_year": 0.5
+      },
+      "L1+L2+RS": {
+        "episodes": 3,
+        "per_year": 0.38
+      }
+    },
+    "day_share": {
+      "L1": 0.204,
+      "L2": 0.006,
+      "RS": 0.384,
+      "L1+L2": 0.002,
+      "L1+L2+RS": 0.002
+    },
+    "note": "❌ 联合频次 0.5 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "科创半导体",
+    "index": "sh000688",
+    "anchor": "sh000688",
+    "bars": 970,
+    "years": 3.99,
+    "degenerate_rs": true,
+    "freq": {
+      "L1": {
+        "episodes": 19,
+        "per_year": 4.76
+      },
+      "L2": {
+        "episodes": 6,
+        "per_year": 1.5
+      },
+      "RS": {
+        "episodes": 0,
+        "per_year": 0.0
+      },
+      "L1+L2": {
+        "episodes": 0,
+        "per_year": 0.0
+      },
+      "L1+L2+RS": {
+        "episodes": 0,
+        "per_year": 0.0
+      }
+    },
+    "day_share": {
+      "L1": 0.173,
+      "L2": 0.006,
+      "RS": 0.0,
+      "L1+L2": 0.0,
+      "L1+L2+RS": 0.0
+    },
+    "note": "⚠️ index == anchor ⇒ 比价恒为 1，**RS 层不可用（N/A）**，组合退化为 L1+L2"
+  },
+  {
+    "theme": "科创创业50",
+    "index": "sh000688",
+    "anchor": "sh000688",
+    "bars": 970,
+    "years": 3.99,
+    "degenerate_rs": true,
+    "freq": {
+      "L1": {
+        "episodes": 19,
+        "per_year": 4.76
+      },
+      "L2": {
+        "episodes": 6,
+        "per_year": 1.5
+      },
+      "RS": {
+        "episodes": 0,
+        "per_year": 0.0
+      },
+      "L1+L2": {
+        "episodes": 0,
+        "per_year": 0.0
+      },
+      "L1+L2+RS": {
+        "episodes": 0,
+        "per_year": 0.0
+      }
+    },
+    "day_share": {
+      "L1": 0.173,
+      "L2": 0.006,
+      "RS": 0.0,
+      "L1+L2": 0.0,
+      "L1+L2+RS": 0.0
+    },
+    "note": "⚠️ index == anchor ⇒ 比价恒为 1，**RS 层不可用（N/A）**，组合退化为 L1+L2"
+  },
+  {
+    "theme": "黄金",
+    "index": "sh000819",
+    "anchor": "sh000001",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 38,
+        "per_year": 4.76
+      },
+      "L2": {
+        "episodes": 12,
+        "per_year": 1.5
+      },
+      "RS": {
+        "episodes": 49,
+        "per_year": 6.14
+      },
+      "L1+L2": {
+        "episodes": 5,
+        "per_year": 0.63
+      },
+      "L1+L2+RS": {
+        "episodes": 4,
+        "per_year": 0.5
+      }
+    },
+    "day_share": {
+      "L1": 0.203,
+      "L2": 0.006,
+      "RS": 0.375,
+      "L1+L2": 0.003,
+      "L1+L2+RS": 0.002
+    },
+    "note": "❌ 联合频次 0.63 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  }
+]
