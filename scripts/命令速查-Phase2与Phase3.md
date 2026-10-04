@@ -55,6 +55,7 @@ cd /Users/a801/Linda/Work/project/gupiao-assistant/trading_lab
 | `scripts/audit_theme_index.py` | **标的选择**：现成主题指数能不能代表该主题 | 可选 | ~10s（离线） | 恒 0；`--gate` 时未全达标 ⇒ 1 |
 | `scripts/audit_theme_signals.py` | **频次审计**：信号一年来几次 | 可选 | ~10s | 恒 0；`--gate` 时低于验收线 ⇒ 1 |
 | `scripts/audit_theme_returns.py` | **收益审计**：效应、显著性、MDE | 可选 | 1~3min | 恒 0（纯报告） |
+| `scripts/explore_theme_index_candidates.py` | **扩主题/换指数**前先勘探候选指数 | 可选 | ~20s | 恒 0（纯报告） |
 | `scripts/verify_marketdata.py` | 行情覆盖体检（既有） | 可选 | <5s | 0 / 1 |
 | `scripts/run_all.py --dry-run` | 看每日流程会跑哪 8 个任务 | 否 | <5s | 0 |
 
@@ -284,6 +285,33 @@ placebo 片段匹配重采样 p（保持片段长度分布，单尾）
   **不参与通过/不通过**（主判据在冻结时已固定为 H=20，事后挑最好的 H 就是多重检验）。
 
 ---
+
+### 4.4b `explore_theme_index_candidates.py` —— 想扩主题 / 换指数时先跑这个
+
+```bash
+.venv/bin/python scripts/explore_theme_index_candidates.py                 # 内置 68 个行业指数候选
+.venv/bin/python scripts/explore_theme_index_candidates.py --codes sh000039,sz399811
+.venv/bin/python scripts/explore_theme_index_candidates.py --discover --discover-filter "半导体|芯片"
+```
+
+三段输出：**① 历史深度**（≥10 年？）→ **② 与 ETF 的相关性**（≥0.8？）→ **③ 达标汇总**。
+
+**当前达标汇总的关键结论**：
+
+```
+✅ sh000935 中证信息  17.2 年  匹配 9/11 只 ETF
+✅ sh000993 全指信息  14.3 年  匹配 9/11
+✅ sz399811 CSSW电子 11.0 年  匹配 8/11
+✅ sh000039 上证信息  17.7 年  匹配 8/11
+✅ sz399363 国证…(现用) 17.2 年  只匹配 5/11
+⚠️ 电网设备（sh561380）任何一个候选都没过 0.8（最好 0.777）
+```
+
+> ⚠️ **两个必须一起读的警告（脚本自己也会打印）**：
+> ① **选择偏差**：这是对 N×M 次相关性取最大值，`≥0.8` 在"按相关性挑指数"之后
+> **不再是干净的预注册判据**。采用要记 P0.5 修订记录 + 重跑只能算样本内探索性，**OOS 不许打开**。
+> ② **相关性 ≥0.8 ≠ 语义匹配**：中证信息/全指信息是**宽泛 IT 指数**，
+> 与半导体 ETF 同步不代表它代表"半导体设备"。
 
 ### 4.5 `theme_timing_report.py` —— 观察哨（**每天真正要看的那一条**）
 
