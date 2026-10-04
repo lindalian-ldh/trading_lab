@@ -46,8 +46,8 @@ def check_mapping_table() -> list:
     from market_filter import _normalize_index_code
     bad = []
     for code, (idx, _name, _s) in etf._ETF_MAP.items():
-        ef, bs = _normalize_index_code(idx)
-        if not (ef[:2] in ("sh", "sz") and bs.count(".") == 1):
+        tx, bs = _normalize_index_code(idx)
+        if not (tx[:2] in ("sh", "sz") and bs.count(".") == 1):
             bad.append(f"{code}->{idx}")
     out.append(results_row(not bad, "指数代码可归一化",
                            "全部通过" if not bad else f"异常: {bad[:3]}"))

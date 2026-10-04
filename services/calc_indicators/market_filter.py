@@ -7,7 +7,7 @@
 
 判定逻辑（顺序执行）：
     1. 前置开关：ENABLE_MARKET_FILTER == False → 直接通过
-    2. 数据获取：拉取基准指数近 N 日日线（efinance 优先，baostock 兜底）
+    2. 数据获取：拉取基准指数近 N 日日线（**baostock / 腾讯双源；东财已禁用**）
     3. 数据不足保护：返回 passed=False
     4. 条件1 - 趋势判定：指数收盘价必须站上 MA{BENCHMARK_MA_PERIOD}
     5. 条件2 - 当日涨跌幅：必须 ≥ BENCHMARK_MIN_CHANGE_PCT
@@ -129,10 +129,14 @@ def _suppress_output(func):
 
 
 def _normalize_index_code(index_code: str) -> tuple:
-    """将统一格式 'sh000001' 转换为 (ef_code, bs_code)。
+    """将统一格式 'sh000001' 转换为 (tx_code, bs_code)。
 
-    efinance 指数代码格式: '000001' (需通过 dataapi 调用) 或 'sh000001'
-    baostock 指数代码格式: 'sh.000001'
+    腾讯（akshare stock_zh_index_daily_tx）: 'sh000001'
+    baostock:                              'sh.000001'
+
+    ⚠️ 2026-10-03：东财（efinance）已从本模块移除（实测反复 ConnectionError，
+    且对 000688 有静默取错标的的隐患）。返回的第一项原先叫 ef_code，
+    现在语义是**腾讯源代码**（两者格式相同，故签名不变，下游无需改动）。
     """
     code = index_code.strip().lower()
     # 输入 'sh000001' / 'sz399001' / 'sh.000001' 统一拆分
@@ -148,55 +152,18 @@ def _normalize_index_code(index_code: str) -> tuple:
     return f"{market}{num}", f"{market}.{num}"
 
 
-def _fetch_index_efinance(ef_code: str, days: int) -> Optional[pd.DataFrame]:
-    """使用 efinance 获取指数数据。
-
-    ⚠️ efinance 的指数代码格式：**纯 6 位数字**（如 '000001'、'399001'、'399006'），
-    不接受 'sh000001' / 'sh.000001'（会返回"证券代码可能有误"并给空数据）。
-    本函数做一次兜底转换：若传入带市场前缀的代码，自动剥离前缀。
-    """
-    try:
-        import efinance as ef
-        # 剥离 'sh'/'sz'/'sh.'/'1.' 等前缀，efinance 只认纯数字
-        code = ef_code.strip()
-        for prefix in ("sh.", "sz.", "sh", "sz", "1.", "0."):
-            if code.lower().startswith(prefix):
-                code = code[len(prefix):]
-                break
-        # efinance 的 get_quote_history 同时支持个股与指数代码
-        df = ef.stock.get_quote_history(code)
-        if df is None or df.empty:
-            return None
-        col_map = {
-            "日期": "date", "开盘": "open", "最高": "high",
-            "最低": "low", "收盘": "close", "成交量": "volume",
-        }
-        df = df.rename(columns=col_map)
-        df["date"] = pd.to_datetime(df["date"])
-        for col in ["open", "high", "low", "close", "volume"]:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors="coerce")
-        df = df.dropna(subset=["close"]).sort_values("date").tail(days).reset_index(drop=True)
-        if df.empty:
-            return None
-        return df[["date", "open", "high", "low", "close", "volume"]]
-    except Exception as e:
-        logger.debug("efinance 获取指数 %s 失败: %s", ef_code, e)
-        return None
-
-
 def _fetch_index_tencent(tx_code: str, days: int) -> Optional[pd.DataFrame]:
     """用 akshare 的**腾讯源**取指数日线（保留 sh/sz 前缀，无代码歧义）。
 
     为什么需要这个源（2026-10-01 加）：
 
       · **baostock 没有科创50** —— `sh.000688` 查询返回空。
-      · **efinance 对 000688 有歧义** —— 它只认纯 6 位数字，故 _fetch_index_efinance
-        会剥掉前缀；而 `000688` 会解析成**深市个股「国城矿业」**。科创50 应是
-        1000+ 点、个股是几元 —— 一旦东财通道恢复，这条路径可能**静默返回个股数据**，
-        把市场状态建立在一只小盘股上。这是比取数失败更糟的失效模式。
-      · **腾讯是非东财供应商** —— 东财通道（efinance / akshare_em）在本机间歇
-        ProxyError，换供应商可规避。
+      · **腾讯用显式 sh/sz 前缀，无代码歧义** —— 历史上 efinance 只认纯 6 位数字，
+        `000688` 会被解析成**深市个股「国城矿业」**（科创50 应是 1000+ 点、个股是几元），
+        可能**静默返回个股数据**，把市场状态建立在一只小盘股上。
+        这是比取数失败更糟的失效模式，也是**东财于 2026-10-03 被整体移除**的原因之一。
+      · **腾讯是非东财供应商** —— 东财通道（efinance / akshare 的 `*_em`）在本机
+        反复 `ConnectionError: RemoteDisconnected`，换供应商可规避。
 
     腾讯源用显式 `sh000688` / `sz399006` 形式，不存在上述歧义。
     任何失败返回 None（调用方继续降级），绝不向 A/B/C 抛异常。
@@ -257,51 +224,25 @@ def _fetch_index_baostock(bs_code: str, days: int) -> Optional[pd.DataFrame]:
 
 
 def _fetch_index(index_code: str, days: int, timeout: int, dbg: bool = False,
-                 prefer: str = "efinance") -> Optional[pd.DataFrame]:
-    """获取指数日线数据：默认 efinance 优先，baostock 兜底。带超时降级。
+                 prefer: str = "baostock") -> Optional[pd.DataFrame]:
+    """获取指数日线数据：baostock / 腾讯 双源，带超时降级。**东财已移除。**
 
     Args:
         index_code: 指数代码，如 'sh000001'
         days: 拉取的天数
         timeout: 单数据源超时秒数
         dbg: 是否打印详细排查日志
-        prefer: 首选数据源，"efinance" 或 "baostock"。
-            调用方可指定 baostock 优先：baostock 的指数查询需 ~20s（冷启动），
-            efinance 在本机 TLS 不可用时也会先耗尽超时，先试死源纯属浪费。
+        prefer: 首选数据源。"baostock" → 先 baostock 再腾讯；其它值 → 先腾讯再 baostock。
+            ⚠️ 2026-10-03：efinance（东财）已从源顺序中**彻底移除**
+            （实测反复 ConnectionError；且对 000688 有静默取错标的的隐患）。
+            传 "efinance" 不再有任何特殊含义，等价于"腾讯优先"。
     """
-    ef_code, bs_code = _normalize_index_code(index_code)
+    tx_code, bs_code = _normalize_index_code(index_code)
     if dbg:
         _debug("══════ 大盘数据获取排查 ══════", True)
-        _debug(f"输入指数代码: {index_code}  →  efinance: {ef_code}  |  baostock: {bs_code}", True)
+        _debug(f"输入指数代码: {index_code}  →  腾讯: {tx_code}  |  baostock: {bs_code}", True)
         _debug(f"拉取天数: {days}  |  单源超时: {timeout}s  |  首选: {prefer}", True)
-
-    def _try_efinance_source():
-        if dbg:
-            _debug("─── 尝试 efinance ───", True)
-        try:
-            import signal as sig
-            def _handler(signum, frame):
-                raise TimeoutError("efinance 超时")
-            sig.signal(sig.SIGALRM, _handler)
-            sig.alarm(timeout)
-            try:
-                df = _suppress_output(lambda: _fetch_index_efinance(ef_code, days))
-            finally:
-                sig.alarm(0)
-            if df is not None and not df.empty:
-                logger.info("大盘指数数据来源: efinance (%s)", ef_code)
-                if dbg:
-                    _debug(f"✅ efinance 成功: {len(df)} 根 K 线", True)
-                    _debug(f"   日期范围: {df['date'].iloc[0].date()} ~ {df['date'].iloc[-1].date()}", True)
-                    _debug(f"   最新收盘: {df['close'].iloc[-1]:.2f}", True)
-                return df
-            if dbg:
-                _debug("❌ efinance 返回空数据", True)
-        except Exception as e:
-            if dbg:
-                _debug(f"❌ efinance 失败: {type(e).__name__}: {e}", True)
-            logger.info("efinance 获取指数失败: %s", e)
-        return None
+        _debug("数据源: baostock + 腾讯（东财已禁用）", True)
 
     def _try_baostock_source():
         if dbg:
@@ -364,19 +305,20 @@ def _fetch_index(index_code: str, days: int, timeout: int, dbg: bool = False,
             logger.info("腾讯源获取指数失败: %s", e)
         return None
 
-    # —— 按 prefer 决定尝试顺序 ——
-    # 腾讯排在 efinance 之前：它用显式 sh/sz 前缀（无 000688 歧义），
-    # 且是非东财供应商（东财通道在本机间歇 ProxyError）。
-    order = [_try_baostock_source, _try_tencent_source, _try_efinance_source]
+    # —— 按 prefer 决定尝试顺序（只有两个源：baostock 与腾讯）——
+    # 东财已于 2026-10-03 从源顺序中彻底移除（实测反复 ConnectionError，
+    # 且对 000688 存在静默取错标的的隐患）。
+    # 腾讯用显式 sh/sz 前缀（无 000688 歧义），是非东财供应商，作为唯一备源。
+    order = [_try_baostock_source, _try_tencent_source]
     if prefer != "baostock":
-        order = [_try_efinance_source, _try_baostock_source, _try_tencent_source]
+        order = [_try_tencent_source, _try_baostock_source]
     for fetch in order:
         df = fetch()
         if df is not None and not df.empty:
             return df
 
     if dbg:
-        _debug("❌ 所有数据源均失败，返回 None", True)
+        _debug("❌ 所有数据源均失败（baostock + 腾讯），返回 None", True)
     return None
 
 
@@ -432,7 +374,7 @@ def check_market_environment(config: TradingConfig) -> dict:
         config.BENCHMARK_FETCH_DAYS,
         config.BENCHMARK_FETCH_TIMEOUT,
         dbg=dbg,
-        prefer=getattr(config, "BENCHMARK_PREFER_SOURCE", "efinance"),
+        prefer=getattr(config, "BENCHMARK_PREFER_SOURCE", "baostock"),
     )
 
     if df is None or df.empty:

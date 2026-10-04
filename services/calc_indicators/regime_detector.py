@@ -317,8 +317,9 @@ def _classify(facts: dict, config: TradingConfig) -> str:
 def _fetch_index_data(config: TradingConfig) -> Optional[pd.DataFrame]:
     """获取基准指数日线。复用 market_filter._fetch_index（多源 + 超时 + 降级）。
 
-    默认让 baostock 优先（见 REGIME_PREFER_SOURCE）：本机 efinance 的 eastmoney
-    HTTPS 通道常被对端断开，先试它只会白等一个超时周期。
+    默认让 baostock 优先（见 REGIME_PREFER_SOURCE）：本机东财通道常被对端断开，
+    先试它只会白等一个超时周期。**东财已于 2026-10-03 从源顺序移除**，
+    现在只有 baostock 与腾讯两个源。
 
     独立异常捕获：任何异常都返回 None，绝不向 A/B/C 抛。
     """
@@ -328,7 +329,7 @@ def _fetch_index_data(config: TradingConfig) -> Optional[pd.DataFrame]:
             config.REGIME_FETCH_BARS,
             config.REGIME_FETCH_TIMEOUT,
             dbg=False,   # 本模块自己有 dbg 输出，避免与 market_filter 日志重复刷屏
-            prefer=getattr(config, "REGIME_PREFER_SOURCE", "efinance"),
+            prefer=getattr(config, "REGIME_PREFER_SOURCE", "baostock"),
         )
     except Exception as e:  # pragma: no cover - 容灾兜底
         logger.info("[E-市场状态] 指数数据获取异常: %s", e)
@@ -375,7 +376,7 @@ def detect_regime(config: TradingConfig) -> dict:
     if dbg:
         _debug("══════ [E-市场状态] 状态雷达排查 ══════", True)
         _debug(f"基准指数: {config.BENCHMARK_INDEX}  |  拉取根数: {config.REGIME_FETCH_BARS}  |  超时: {config.REGIME_FETCH_TIMEOUT}s", True)
-        _debug(f"首选数据源: {getattr(config, 'REGIME_PREFER_SOURCE', 'efinance')}", True)
+        _debug(f"首选数据源: {getattr(config, 'REGIME_PREFER_SOURCE', 'baostock')}", True)
         _debug(f"均线: MA{config.REGIME_MA_SHORT}/{config.REGIME_MA_MID}/{config.REGIME_MA_LONG}"
                f"  |  ADX周期: {config.REGIME_ADX_PERIOD}  趋势线: {config.REGIME_ADX_TREND_MIN}", True)
         _debug(f"布林: {config.REGIME_BB_PERIOD}日/{config.REGIME_BB_STD}σ  挤压分位: {config.REGIME_SQUEEZE_BW_PCT}", True)

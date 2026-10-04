@@ -136,24 +136,34 @@ def _suppress_output(func):
 # ==================== 数据获取层 ====================
 
 def _normalize_code(symbol: str) -> tuple:
-    """将纯6位代码转换为 (ef_code, bs_code)。"""
+    """将纯6位代码转换为 (tx_code, bs_code)。
+
+    腾讯（akshare stock_zh_a_hist_tx）: 'sh600000' / 'sz002371'
+    baostock:                          'sh.600000' / 'sz.002371'
+    """
     code = symbol.strip()
     if len(code) != 6 or not code.isdigit():
         raise ValueError(f"股票代码格式错误: {code}，应为6位数字")
     if code.startswith(("6", "5", "9")):
-        return code, f"sh.{code}"
-    return code, f"sz.{code}"
+        return f"sh{code}", f"sh.{code}"
+    return f"sz{code}", f"sz.{code}"
 
 
-def _normalize_ef(df: pd.DataFrame, config: TradingConfig) -> pd.DataFrame:
-    """标准化 efinance 输出 → {date, open, high, low, close, volume}。"""
+def _normalize_tx(df: pd.DataFrame, config: TradingConfig) -> pd.DataFrame:
+    """标准化腾讯源输出 → {date, open, high, low, close, volume}。
+
+    ⚠️ 2026-10-03：原 `_normalize_ef`（efinance/东财）已被本函数取代 ——
+    东财通道在本机属**死路径**（TLS 被对端断开），东财已整体弃用。
+    """
     col_map = {
         "日期": "date", "开盘": "open", "最高": "high",
         "最低": "low", "收盘": "close", "成交量": "volume",
     }
-    df = df.rename(columns=col_map)
+    df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
     df["date"] = pd.to_datetime(df["date"])
     for col in ["open", "high", "low", "close", "volume"]:
+        if col not in df.columns:
+            df[col] = 0.0
         df[col] = pd.to_numeric(df[col], errors="coerce")
     df = df.dropna(subset=["close"]).sort_values("date").tail(config.DATA_TRADING_DAYS).reset_index(drop=True)
     return df[["date", "open", "high", "low", "close", "volume"]]
@@ -171,14 +181,18 @@ def _normalize_bs(df: pd.DataFrame, config: TradingConfig) -> pd.DataFrame:
 def fetch_data(symbol: str, config: TradingConfig) -> pd.DataFrame:
     """获取近 DATA_TRADING_DAYS 个交易日的日线数据。
 
-    尝试顺序：baostock 优先，efinance 兜底。均失败则友好提示并退出。
+    尝试顺序：baostock 优先，**腾讯兜底**。均失败则友好提示并退出。
+    ⚠️ 2026-10-03：原兜底源 efinance（东财）已替换为腾讯 ——
+    东财通道在本机因 TLS 被对端断开而**长期不可用**（原兜底实为死代码），
+    且腾讯前复权口径与 baostock adjustflag='2' 一致
+    （实测 002371/300567/512480 周线偏差 0.000%）。
 
     注意 start_date 的换算：DATA_TRADING_DAYS 是**交易日**数，而接口按**自然日**过滤，
     故需 ×1.6 再留缓冲（一年约 243 交易日 / 365 自然日 ≈ 0.67）。
     原实现写死 `timedelta(days=240)`，实际只换来约 161 个交易日 ——
     会让依赖数据长度的判定（如 `--index auto` 的相关性样本数）与配置不符。
     """
-    ef_code, bs_code = _normalize_code(symbol)
+    tx_code, bs_code = _normalize_code(symbol)
     end_date = datetime.now().strftime("%Y-%m-%d")
     calendar_days = int(config.DATA_TRADING_DAYS * 1.6) + 30
     start_date = (datetime.now() - timedelta(days=calendar_days)).strftime("%Y-%m-%d")
@@ -216,17 +230,25 @@ def fetch_data(symbol: str, config: TradingConfig) -> pd.DataFrame:
     if df is not None and not df.empty:
         return _normalize_bs(df, config)
 
-    # —— 数据源 2: efinance（兜底）——
-    def _try_efinance():
+    # —— 数据源 2: 腾讯（兜底）——
+    # 取代原 efinance 兜底（东财通道在本机长期不可用，见 docstring）。
+    # adjust='qfq' 以对齐 baostock 的 adjustflag='2'（前复权），
+    # 否则兜底路径与主路径的指标口径会不一致。
+    def _try_tencent():
         try:
-            import efinance as ef
-            return ef.stock.get_quote_history(ef_code)
+            import akshare as ak
+            return ak.stock_zh_a_hist_tx(
+                symbol=tx_code,
+                start_date=start_date.replace("-", ""),
+                end_date=end_date.replace("-", ""),
+                adjust="qfq",
+            )
         except Exception:
             return None
 
-    df = _suppress_output(_try_efinance)
+    df = _suppress_output(_try_tencent)
     if df is not None and not df.empty:
-        return _normalize_ef(df, config)
+        return _normalize_tx(df, config)
 
     print(f"⚠️  无法获取 {symbol} 的行情数据，请检查代码或网络连接")
     sys.exit(1)

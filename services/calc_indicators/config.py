@@ -148,8 +148,9 @@ class TradingConfig:
                                               #    （会话已复用，见 market_filter._ensure_bs_login），
                                               #    取数本身仅 0.2~3s。原先默认 5s 会把 baostock 掐死，
                                               #    导致大盘过滤长期"取数失败 → 直接否决"。
-    BENCHMARK_PREFER_SOURCE: str = "baostock" # 首选数据源：'baostock' / 'efinance'
-                                              # 本机 efinance 走 eastmoney HTTPS 常被对端断开
+    BENCHMARK_PREFER_SOURCE: str = "baostock" # 首选数据源：'baostock'（顺序 baostock → 腾讯）
+                                              # 其它任意值 = 腾讯优先（baostock 兜底）。
+                                              # ⚠️ 2026-10-03：东财(efinance)已从源顺序彻底移除
 
     # ── 基准指数自动选择（benchmark.py）──
     # 实测：个股与任何指数相关性仅 0.15~0.38（ETF 是 0.80~0.94），
@@ -347,9 +348,10 @@ class TradingConfig:
                                                     # ⚠️ baostock 的指数查询冷启动需 20~30s，
                                                     #    阈值设太小会把唯一可用的数据源掐死
                                                     #    （实测 250 根约 31s，故留足余量）
-    REGIME_PREFER_SOURCE: str = "baostock"          # 首选数据源：'baostock' / 'efinance'
-                                                    # 本机 efinance 走 eastmoney HTTPS 常被 TLS 断开，
-                                                    # 先试死源会白等一个超时周期
+    REGIME_PREFER_SOURCE: str = "baostock"          # 首选数据源：'baostock'（顺序 baostock → 腾讯）
+                                                    # 其它任意值 = 腾讯优先。
+                                                    # ⚠️ 2026-10-03：东财(efinance)已从源顺序彻底移除，
+                                                    # 传 'efinance' 不再有任何特殊含义
     # 均线结构
     REGIME_MA_SHORT: int = 5                        # 短均线
     REGIME_MA_MID: int = 20                         # 中均线（震荡/趋势分界的核心）

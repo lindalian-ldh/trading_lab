@@ -87,7 +87,10 @@ def _suppress_output(func):
 # ==================== 周线数据获取 ====================
 
 def _normalize_code(symbol: str) -> tuple:
-    """将纯6位代码转换为 (ef_code, bs_code)。
+    """将纯6位代码转换为 (tx_code, bs_code)。
+
+    腾讯（akshare stock_zh_a_hist_tx）: 'sz002371' / 'sh512480'
+    baostock:                          'sz.002371' / 'sh.512480'
 
     与 main.py 中同名函数保持一致，避免依赖 main 模块（解耦）。
     """
@@ -95,46 +98,47 @@ def _normalize_code(symbol: str) -> tuple:
     if len(code) != 6 or not code.isdigit():
         raise ValueError(f"股票代码格式错误: {code}，应为6位数字")
     if code.startswith(("6", "5", "9")):
-        return code, f"sh.{code}"
-    return code, f"sz.{code}"
+        return f"sh{code}", f"sh.{code}"
+    return f"sz{code}", f"sz.{code}"
 
 
-def _fetch_weekly_efinance(ef_code: str, bars: int) -> Optional[pd.DataFrame]:
-    """efinance 拉取周线数据（klt=102）。
+def _fetch_daily_tencent(tx_code: str, days: int) -> Optional[pd.DataFrame]:
+    """腾讯源拉取**前复权**日线（adjust='qfq'），供聚合生成周线用。
 
-    注意：efinance 周线日期标记为该周周一；东方财富后端对周线有返回上限
-    （实测仅返回最近约 25 根），数据量常不足 MA60 所需，故仅作备选。
+    为什么用腾讯替代 efinance（2026-10-03）：
+      · 东财通道（efinance）在本机反复 ConnectionError，属**死路径**；
+      · 腾讯源实测可用，且**前复权口径与 baostock 的 adjustflag='2' 完全一致**
+        （2026-10-03 实测 002371 / 300567 / 512480 三只标的最新 8 周收盘
+        偏差 0.000%），故可安全顶替。
+
+    失败返回 None（调用方继续降级到 baostock），绝不抛。
     """
     try:
-        import efinance as ef
-        df = None
-        # 主用 klt=102（efinance 标准参数）；兼容个别旧版本可能用 ktype
-        for kwargs in ({"klt": 102}, {"klt": "102"}, {"ktype": 102}, {"ktype": "W"}):
-            try:
-                df = ef.stock.get_quote_history(ef_code, **kwargs)
-            except TypeError:
-                continue
-            except Exception:
-                continue
-            if df is not None and not df.empty:
-                break
+        import akshare as ak
+        end_date = datetime.now().strftime("%Y%m%d")
+        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y%m%d")
+        df = _suppress_output(lambda: ak.stock_zh_a_hist_tx(
+            symbol=tx_code, start_date=start_date, end_date=end_date, adjust="qfq"))
         if df is None or df.empty:
             return None
         col_map = {
             "日期": "date", "开盘": "open", "最高": "high",
             "最低": "low", "收盘": "close", "成交量": "volume",
         }
-        df = df.rename(columns=col_map)
+        df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+        if "date" not in df.columns:
+            return None
         df["date"] = pd.to_datetime(df["date"])
         for col in ["open", "high", "low", "close", "volume"]:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors="coerce")
-        df = df.dropna(subset=["close"]).sort_values("date").tail(bars).reset_index(drop=True)
+            if col not in df.columns:
+                df[col] = 0.0
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        df = df.dropna(subset=["close"]).sort_values("date").tail(days).reset_index(drop=True)
         if df.empty:
             return None
         return df[["date", "open", "high", "low", "close", "volume"]]
     except Exception as e:
-        logger.debug("efinance 周线获取 %s 失败: %s", ef_code, e)
+        logger.debug("腾讯源日线（周线聚合用）%s 失败: %s", tx_code, e)
         return None
 
 
@@ -171,31 +175,6 @@ def _fetch_weekly_baostock(bs_code: str, bars: int) -> Optional[pd.DataFrame]:
         return df[["date", "open", "high", "low", "close", "volume"]]
     except Exception as e:
         logger.debug("baostock 周线获取 %s 失败: %s", bs_code, e)
-        return None
-
-
-def _fetch_daily_efinance(ef_code: str, days: int) -> Optional[pd.DataFrame]:
-    """efinance 拉取日线数据（klt=101），供聚合生成周线用。"""
-    try:
-        import efinance as ef
-        df = ef.stock.get_quote_history(ef_code, klt=101)
-        if df is None or df.empty:
-            return None
-        col_map = {
-            "日期": "date", "开盘": "open", "最高": "high",
-            "最低": "low", "收盘": "close", "成交量": "volume",
-        }
-        df = df.rename(columns=col_map)
-        df["date"] = pd.to_datetime(df["date"])
-        for col in ["open", "high", "low", "close", "volume"]:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors="coerce")
-        df = df.dropna(subset=["close"]).sort_values("date").tail(days).reset_index(drop=True)
-        if df.empty:
-            return None
-        return df[["date", "open", "high", "low", "close", "volume"]]
-    except Exception as e:
-        logger.debug("efinance 日线获取 %s 失败: %s", ef_code, e)
         return None
 
 
@@ -262,7 +241,7 @@ def _fetch_weekly_data(symbol: str, config: TradingConfig) -> Optional[pd.DataFr
     失败时返回 None，绝不向 A/B/C 抛异常。
     """
     dbg = config.WEEKLY_DEBUG
-    ef_code, bs_code = _normalize_code(symbol)
+    tx_code, bs_code = _normalize_code(symbol)
     bars = config.WEEKLY_FETCH_BARS
     timeout = config.WEEKLY_FETCH_TIMEOUT
     # 日线所需天数：bars 周 * 5 交易日/周 + 节假日缓冲 + 本周余量，再放大 1.5 倍确保充足
@@ -270,8 +249,9 @@ def _fetch_weekly_data(symbol: str, config: TradingConfig) -> Optional[pd.DataFr
 
     if dbg:
         _debug("══════ [D-周线观察] 周线数据获取排查 ══════", True)
-        _debug(f"输入代码: {symbol}  →  efinance: {ef_code}  |  baostock: {bs_code}", True)
+        _debug(f"输入代码: {symbol}  →  腾讯: {tx_code}  |  baostock: {bs_code}", True)
         _debug(f"目标周线根数: {bars}  |  需日线天数: ~{need_days}  |  单源超时: {timeout}s", True)
+        _debug("数据源: 腾讯(前复权) + baostock（东财已禁用）", True)
 
     def _with_timeout(fn, label):
         import signal as sig
@@ -284,27 +264,30 @@ def _fetch_weekly_data(symbol: str, config: TradingConfig) -> Optional[pd.DataFr
         finally:
             sig.alarm(0)
 
-    # —— 方案1（主）：efinance 日线 → 聚合周线 ——
+    # —— 方案1（主）：腾讯 前复权日线 → 聚合周线 ——
+    # 为什么是腾讯而不是 efinance（2026-10-03 改）：
+    #   · 东财通道在本机反复 ConnectionError，原方案1 实际是死路径；
+    #   · 腾讯前复权与 baostock adjustflag='2' 口径一致（三只标的 8 周偏差 0.000%）。
     if dbg:
-        _debug("─── 尝试 efinance 日线聚合周线 ───", True)
+        _debug("─── 尝试 腾讯 日线聚合周线 ───", True)
     try:
         daily = _suppress_output(lambda: _with_timeout(
-            lambda: _fetch_daily_efinance(ef_code, need_days), "efinance 日线"))
+            lambda: _fetch_daily_tencent(tx_code, need_days), "腾讯 日线"))
         if daily is not None and not daily.empty:
             weekly = _daily_to_weekly(daily).tail(bars).reset_index(drop=True)
             if not weekly.empty:
-                logger.info("[D-周线观察] 数据来源: efinance 日线聚合 (%s) %d 根周线", ef_code, len(weekly))
+                logger.info("[D-周线观察] 数据来源: 腾讯 日线聚合 (%s) %d 根周线", tx_code, len(weekly))
                 if dbg:
-                    _debug(f"✅ efinance 日线聚合成功: 日线 {len(daily)} 根 → 周线 {len(weekly)} 根", True)
+                    _debug(f"✅ 腾讯 日线聚合成功: 日线 {len(daily)} 根 → 周线 {len(weekly)} 根", True)
                     _debug(f"   日期范围: {weekly['date'].iloc[0].date()} ~ {weekly['date'].iloc[-1].date()}", True)
                     _debug(f"   最新周收盘: {weekly['close'].iloc[-1]:.2f}（周线日期=该周最后交易日）", True)
                 return weekly
         if dbg:
-            _debug("❌ efinance 日线返回空", True)
+            _debug("❌ 腾讯 日线返回空", True)
     except Exception as e:
         if dbg:
-            _debug(f"❌ efinance 日线失败: {type(e).__name__}: {e}", True)
-        logger.info("[D-周线观察] efinance 日线获取失败: %s", e)
+            _debug(f"❌ 腾讯 日线失败: {type(e).__name__}: {e}", True)
+        logger.info("[D-周线观察] 腾讯 日线获取失败: %s", e)
 
     # —— 方案2：baostock 日线 → 聚合周线 ——
     if dbg:
@@ -332,26 +315,9 @@ def _fetch_weekly_data(symbol: str, config: TradingConfig) -> Optional[pd.DataFr
             _debug(f"❌ baostock 日线失败: {type(e).__name__}: {e}", True)
         logger.info("[D-周线观察] baostock 日线获取失败: %s", e)
 
-    # —— 方案3（备）：efinance 原生周线 ——
-    if dbg:
-        _debug("─── 尝试 efinance 原生周线（备选） ───", True)
-    try:
-        df = _suppress_output(lambda: _with_timeout(
-            lambda: _fetch_weekly_efinance(ef_code, bars), "efinance 周线"))
-        if df is not None and not df.empty:
-            logger.info("[D-周线观察] 数据来源: efinance 原生周线 (%s) %d 根", ef_code, len(df))
-            if dbg:
-                _debug(f"✅ efinance 原生周线成功: {len(df)} 根", True)
-                _debug(f"   日期范围: {df['date'].iloc[0].date()} ~ {df['date'].iloc[-1].date()}", True)
-                _debug(f"   ⚠️  efinance 周线常不足 60 根，MA60 计算可能数据不足", True)
-            return df
-        if dbg:
-            _debug("❌ efinance 原生周线返回空", True)
-    except Exception as e:
-        if dbg:
-            _debug(f"❌ efinance 原生周线失败: {type(e).__name__}: {e}", True)
-
-    # —— 方案4（备）：baostock 原生周线 ——
+    # —— 方案3（备）：baostock 原生周线 ——
+    # ⚠️ 2026-10-03：原"efinance 原生周线"备选已**删除**（东财通道死路径，
+    #    且其后端对周线仅返回约 25 根，本就不足 MA60 所需 60 根）。
     if dbg:
         _debug("─── 尝试 baostock 原生周线（备选） ───", True)
     try:
