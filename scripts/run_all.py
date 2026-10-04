@@ -145,6 +145,33 @@ SERVICES: dict[str, dict] = {
         "slow": True, "needs_symbol": False,
     },
 
+    # —— 龙虎榜数据层（板块资金温度计的原料）——
+    "lhb": {
+        "desc": "龙虎榜累积（Tier1 全区间自愈 + Tier2 最近90日毛额）",
+        # 不带 --start ⇒ Tier1 从 2025-01-02 起扫描，只补缺失的日子（自愈任何漏跑）。
+        # --end 用 a.date（默认=昨天）⇒ 绝不碰"当天尚未发布"的数据，
+        #   否则会把真实交易日记成空并永久跳过（见 core/lhb_store._is_publish_risky）。
+        # --tier 2 --recent 90：每日补最近 90 个交易日的毛额（买卖比/碾压占比的原料）。
+        #   **--recent 必须给**：Tier1 是全量 424 天，而 Tier2 只回填了最近一段；
+        #   不给窗口的话每天都会去补历史 300+ 天（2 万多次调用）。
+        "cmd": lambda a: ["uv", "run", "python", "scripts/lhb_update.py",
+                          "--tier", "2", "--recent", "90",
+                          "--end", a.date, "--throttle", "0.8"],
+        "scenarios": {"daily", "full"},
+        "slow": False, "needs_symbol": False,
+    },
+
+    # —— 板块轮动面板（需求 #1；只显示不决策）——
+    "rotation_panel": {
+        "desc": "板块轮动资金确认板（只显示，不决策）",
+        # 依赖 lhb 步骤的数据 ⇒ 必须排在 lhb 之后（见 SCENARIO_ORDER）。
+        # --date 传 a.date（默认=昨天）；非交易日会由脚本自动回退到最近交易日。
+        "cmd": lambda a: ["uv", "run", "python", "scripts/rotation_panel.py",
+                          "--date", a.date, "--save"],
+        "scenarios": {"daily", "full"},
+        "slow": False, "needs_symbol": False,
+    },
+
     # —— 个股层 ——
     "calc": {
         "desc": "开仓三维度筛查",
@@ -203,10 +230,12 @@ SERVICES: dict[str, dict] = {
 # 场景 → 服务有序列表（顺序即执行顺序）
 SCENARIO_ORDER: dict[str, list[str]] = {
     "macro":     ["macro_data", "macro_charts"],
-    "daily":     ["alarming", "bankuai", "news", "holdings", "report"],
+    # lhb 放最前：它是**数据获取**步骤；rotation_panel 依赖它的数据，故紧随其后；
+    # 将来"板块轮动面板"若并入 alarming，也仍要在 lhb 之后。
+    "daily":     ["lhb", "rotation_panel", "alarming", "bankuai", "news", "holdings", "report"],
     "stock":     ["calc", "yanbao", "sell", "report"],
     "pipeline":  ["pipeline"],
-    "full":      ["macro_data", "macro_charts", "alarming", "bankuai",
+    "full":      ["macro_data", "macro_charts", "lhb", "rotation_panel", "alarming", "bankuai",
                   "news", "holdings", "pipeline", "report"],
 }
 
