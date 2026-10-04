@@ -1030,6 +1030,26 @@ rotation_panel.py --date 2026-10-04（周日）→ 自动回退到 2026-09-30 �
 
 ---
 
+### P3 完成记录（2026-10-04）—— 观察哨落地（**只显示、不决策**）
+
+| 步 | 产出 | 说明 |
+|---|---|---|
+| **P3.1** | [`core/theme_sentinel.py`](../core/theme_sentinel.py) + [`scripts/theme_timing_report.py`](theme_timing_report.py) | 一条命令看 10 个主题的 L1/L2/RS 点亮、数据充分度、**独立价格序列去重**（10 主题只有 5 条序列）。支持 `--date`（可复现）/ `--json` / `--save` / `--gate` |
+| **P3.2** | `data/observations/theme_signal_ledger.csv`（新）+ 个股台账加 `signal_family` 列 | **主题级信号不写进个股台账**（它没有 `symbol`），另开主题级台账，同样带 `signal_family='theme_timing'`、`validated=False`，按 `(date, theme)` 幂等。个股台账新增 `signal_family` 列（本表恒 `entry_gate`；老行留空，分析时按 `entry_gate` 处理） |
+| **P3.3** | 契约写死 | 渲染的**首尾都**打印 `⚠️ 本板只做确认与证伪，不产生买入信号，不占仓位权重` 与 `❌ 未通过 P0.5 预注册判据 ⇒ 仅观察`；每行带 `validated=False`。**测试钉住**（`tests/test_theme_sentinel.py`） |
+| **P3.4** | 文档 | 本节 + [`每日流程.md`](每日流程.md) 新增「Step 1 附之零 · 主题转折观察哨」+ [`交接总结.md`](交接总结.md) 横幅更新 + [`交接总结-Phase2.md`](交接总结-Phase2.md) |
+| **P3.5** | git | 见提交记录 |
+| 附 | [`run_all.py`](run_all.py) | daily 场景插入 `theme_sentinel`（**不改 crontab**）⇒ daily 从 7 个任务变 **8 个** |
+
+**数据不可用的处理**（P3.1 的硬要求）：缺数据 / 宽基锚缺数据 / 数据过期超过
+`STALE_DAYS=5` 天，一律打印 **`❌ 数据不可用`**，并在【数据充分度】段单独列出
+—— **绝不静默当成"今日无信号"**。
+
+**与 PANIC_DOWN 的仲裁（P2.6 的最终形态）**：`PANIC_DOWN` 能下指令、转折信号不能
+⇒ **结构上不可能给出矛盾指令**；原计划的仲裁表因此不再需要（退化为一句话，写在报告抬头）。
+
+---
+
 ## 六、Phase 3 · 集成与纪律闭环（约 1 周）
 
 | 步骤 | 内容 | 关键要求 |

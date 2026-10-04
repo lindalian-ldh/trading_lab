@@ -1,0 +1,205 @@
+"""Phase 3 观察哨（core/theme_sentinel.py）单元测试。
+
+三条契约必须被测试钉住：
+1. **数据不可用必须显式** —— 缺数据/过期报 `❌ 数据不可用`，**不许**退化成"无信号"；
+2. **只显示、不决策** —— 每条输出带 `validated=False`，渲染里必须有两条横幅；
+3. **无未来函数** —— 指定 as_of 时的读数，必须等于把数据截断到 as_of 后的读数。
+"""
+
+from __future__ import annotations
+
+import pathlib
+
+import numpy as np
+import pandas as pd
+import pytest
+
+import core.theme_sentinel as sn
+
+
+# ====================================================================
+# 夹具
+# ====================================================================
+
+def _mk(closes, start="2020-01-01", last=None) -> pd.DataFrame:
+    c = np.asarray(closes, dtype=float)
+    end = last or pd.Timestamp(start) + pd.tseries.offsets.BDay(len(c) - 1)
+    dates = pd.bdate_range(end=end, periods=len(c))
+    return pd.DataFrame({"date": dates, "open": c, "high": c + 0.1,
+                         "low": c - 0.1, "close": c, "volume": np.nan})
+
+
+def _trend(n=400, base=100.0, step=0.05, last=None):
+    return _mk([base + step * i for i in range(n)], last=last)
+
+
+def _l1_on_frame():
+    """末尾 L1 点亮（结构转多）的序列：摆动高点 130（在 20 日确认），56 日突破、57 日确认。"""
+    a = [100 + 2 * i for i in range(16)]
+    b = [130 - 2 * (i - 15) for i in range(16, 36)]
+    c = [92 + 2 * (i - 36) for i in range(36, 58)]
+    return _mk(a + b + c)
+
+
+THEME = {"theme": "单元测试主题", "index": "sz399363", "anchor": "sz399006"}
+THEME_SELF = {"theme": "科创测试", "index": "sh000688", "anchor": "sh000688"}
+
+
+# ====================================================================
+# 契约 1：数据不可用必须显式
+# ====================================================================
+
+def test_missing_index_reported_as_unavailable_not_no_signal():
+    r = sn.theme_status(THEME, None, _trend())
+    assert r["available"] is False
+    assert "数据不可用" in r["status"]
+    assert "无信号" not in r["status"]
+
+
+def test_missing_anchor_reported_as_unavailable():
+    r = sn.theme_status(THEME, _trend(), None)
+    assert r["available"] is False
+    assert "宽基锚取数失败" in r["status"]
+
+
+def test_stale_data_is_unavailable_not_safe():
+    """数据过期 ⇒ 不可用。**绝不**把陈旧数据当成"当日无信号"。"""
+    idx = _trend(n=200, last="2026-01-05")
+    r = sn.theme_status(THEME, idx, _trend(200), as_of="2026-03-02")
+    assert r["available"] is False
+    assert r["staleness_days"] > sn.STALE_DAYS
+    assert "数据不可用" in r["status"]
+
+
+def test_empty_dataframe_is_unavailable():
+    r = sn.theme_status(THEME, pd.DataFrame(columns=["date", "open", "high", "low", "close"]),
+                        _trend())
+    assert r["available"] is False
+
+
+def test_loader_exception_degrades_to_unavailable():
+    def _boom(code):
+        raise RuntimeError("网络炸了")
+    rows = sn.build_sentinel([THEME], _boom)
+    assert len(rows) == 1 and rows[0]["available"] is False
+
+
+# ====================================================================
+# 契约 2：只显示、不决策
+# ====================================================================
+
+def test_every_row_is_marked_unvalidated():
+    rows = [sn.theme_status(THEME, _trend(200), _trend(200))]
+    assert rows[0]["validated"] is False
+    txt = sn.format_sentinel(rows)
+    assert sn.VALIDATION_NOTE in txt
+    assert sn.DISCIPLINE_NOTE in txt
+    assert "不产生买入信号" in txt
+
+
+def test_format_contains_arbitration_note_and_series_section():
+    rows = sn.build_sentinel([THEME, THEME_SELF],
+                             lambda c: _trend(200) if c != "sh000688" else _trend(200))
+    txt = sn.format_sentinel(rows, as_of="2026-09-30")
+    assert "PANIC_DOWN" in txt and "矛盾指令" in txt
+    assert "独立价格序列" in txt
+    assert "数据充分度" in txt
+
+
+def test_format_prints_failure_rows_in_availability_section():
+    rows = [sn.theme_status(THEME, None, _trend(200))]
+    txt = sn.format_sentinel(rows)
+    assert "可用 0/1" in txt
+    assert "❌" in txt
+
+
+def test_arbitration_note_mentions_both_sides():
+    note = sn.arbitration_note()
+    assert "PANIC_DOWN" in note and "转折信号" in note
+
+
+# ====================================================================
+# 契约 3：无未来函数
+# ====================================================================
+
+def test_as_of_uses_only_past_data():
+    """全序列 + as_of=T 的读数，必须与"先把数据截断到 T"的读数完全一致。"""
+    idx = _l1_on_frame()
+    a = _trend(len(idx), base=50.0)
+    for T in (idx["date"].iloc[40], idx["date"].iloc[56], idx["date"].iloc[-1]):
+        cut = idx[idx["date"] <= T].reset_index(drop=True)
+        x = sn.theme_status(THEME, idx, a, as_of=T)
+        y = sn.theme_status(THEME, cut, a, as_of=None)
+        assert (x["l1"], x["l2"], x["rs"], x["close"]) == \
+               (y["l1"], y["l2"], y["rs"], y["close"]), f"T={T} 出现前视偏差"
+
+
+# ====================================================================
+# 语义：状态标签 / RS 退化
+# ====================================================================
+
+def test_l1_lit_is_labelled_as_observation_only():
+    idx = _l1_on_frame()
+    r = sn.theme_status(THEME, idx, _trend(len(idx), base=50.0))
+    assert r["l1"] is True
+    assert "观察" in r["status"]
+    assert r["l1_state_days"] >= 1
+    assert r["available"] is True
+
+
+def test_rs_is_na_when_index_equals_anchor():
+    r = sn.theme_status(THEME_SELF, _trend(200), _trend(200))
+    assert r["rs_available"] is False
+    assert any("N/A" in w for w in r["warnings"])
+    assert r["rs"] is False
+
+
+def test_same_index_is_loaded_once_for_shared_themes():
+    """10 个主题只有 5 条价格序列 ⇒ 同一指数只能取一次。"""
+    calls = []
+
+    def _load(code):
+        calls.append(code)
+        return _trend(120)
+
+    t1 = {"theme": "A", "index": "sz399363", "anchor": "sz399006"}
+    t2 = {"theme": "B", "index": "sz399363", "anchor": "sz399006"}
+    rows = sn.build_sentinel([t1, t2], _load)
+    assert len(rows) == 2
+    assert calls.count("sz399363") == 1
+    assert calls.count("sz399006") == 1
+
+
+# ====================================================================
+# 台账（P3.2）
+# ====================================================================
+
+def test_save_ledger_is_idempotent_and_carries_family(tmp_path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_ttr", pathlib.Path(__file__).resolve().parents[1] / "scripts" / "theme_timing_report.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    rows = sn.build_sentinel([THEME], lambda c: _trend(200))
+    ledger = tmp_path / "theme_signal_ledger.csv"
+    mod.save_ledger(rows, path=ledger)
+    n1 = len(pd.read_csv(ledger))
+    mod.save_ledger(rows, path=ledger)
+    n2 = len(pd.read_csv(ledger))
+    assert n1 == n2 == 1
+    d = pd.read_csv(ledger)
+    assert d["signal_family"].iloc[0] == "theme_timing"
+    assert bool(d["validated"].iloc[0]) is False
+    assert list(d.columns) == mod.COLUMNS
+
+
+def test_save_ledger_skips_unavailable_rows(tmp_path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_ttr2", pathlib.Path(__file__).resolve().parents[1] / "scripts" / "theme_timing_report.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    rows = sn.build_sentinel([THEME], lambda c: None)
+    written, total = mod.save_ledger(rows, path=tmp_path / "x.csv")
+    assert written == 0 and total == 0

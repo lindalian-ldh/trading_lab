@@ -172,6 +172,18 @@ SERVICES: dict[str, dict] = {
         "slow": False, "needs_symbol": False,
     },
 
+    # —— 主题转折观察哨（需求 #2 / Phase 2；**只显示不决策**）——
+    "theme_sentinel": {
+        "desc": "主题转折观察哨（Phase 2 未通过预注册验证 ⇒ 只显示、不决策）",
+        # P3.1：每主题 L1/L2/RS 点亮情况 + 数据充分度 + 独立价格序列去重。
+        # 数据不可用会**显式打印**「❌ 数据不可用」，绝不静默当成"无信号"；
+        # 要把它当门禁用请加 --gate（有主题不可用则退出码 1）。
+        "cmd": lambda a: ["uv", "run", "python", "scripts/theme_timing_report.py",
+                          "--date", a.date, "--save"],
+        "scenarios": {"daily", "full"},
+        "slow": False, "needs_symbol": False,
+    },
+
     # —— 个股层 ——
     "calc": {
         "desc": "开仓三维度筛查",
@@ -232,11 +244,12 @@ SCENARIO_ORDER: dict[str, list[str]] = {
     "macro":     ["macro_data", "macro_charts"],
     # lhb 放最前：它是**数据获取**步骤；rotation_panel 依赖它的数据，故紧随其后；
     # 将来"板块轮动面板"若并入 alarming，也仍要在 lhb 之后。
-    "daily":     ["lhb", "rotation_panel", "alarming", "bankuai", "news", "holdings", "report"],
+    "daily":     ["lhb", "rotation_panel", "theme_sentinel", "alarming", "bankuai",
+                  "news", "holdings", "report"],
     "stock":     ["calc", "yanbao", "sell", "report"],
     "pipeline":  ["pipeline"],
-    "full":      ["macro_data", "macro_charts", "lhb", "rotation_panel", "alarming", "bankuai",
-                  "news", "holdings", "pipeline", "report"],
+    "full":      ["macro_data", "macro_charts", "lhb", "rotation_panel", "theme_sentinel",
+                  "alarming", "bankuai", "news", "holdings", "pipeline", "report"],
 }
 
 

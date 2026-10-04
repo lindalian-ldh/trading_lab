@@ -55,6 +55,12 @@ COLUMNS = [
     "score_double", "score_rank", "rank_atr", "rank_dev", "score_n_valid",
     "s_hard_veto", "score_version",
     "bought", "my_note", "logged_at",
+    # —— P3.2 族标签 ——
+    # 本文件写入的都是**入场闸门**族的记录（个股级）。
+    # 主题级转折信号（观察哨）**不写这张表**（它没有 symbol），
+    # 走 data/observations/theme_signal_ledger.csv，同样带 signal_family='theme_timing'。
+    # 老行该列为空 ⇒ 分析时按 "entry_gate" 处理。
+    "signal_family",
 ]
 
 
@@ -219,6 +225,8 @@ def main() -> int:
               f"B={'✅' if b_pass else '❌'} C={'✅' if c_pass else '❌'} {mark}")
 
     new = pd.DataFrame(rows, columns=COLUMNS)
+    if not new.empty and "signal_family" in new.columns:
+        new["signal_family"] = "entry_gate"        # P3.2：本表只有这一族
     if new.empty:
         merged = old
     else:
