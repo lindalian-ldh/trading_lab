@@ -43,12 +43,37 @@ VALIDATION_NOTE = ("❌ 未通过 P0.5 预注册判据（L1 t=−0.42~+1.00；�
 STALE_DAYS = 5
 #: 观测可信所需最少根数
 MIN_BARS = 60
+#: 主题与锚的日收益相关性超过此值 ⇒ **RS 层近乎退化**（比价近乎常数）
+RS_WEAK_CORR = 0.85
 
 
 def arbitration_note() -> str:
     """P2.6 的最终形态（原「仲裁表」退化为一句话）。"""
     return ("PANIC_DOWN（左侧，已验证但体制依赖）**可以**下指令；"
             "转折信号（右侧，未通过验证）**不可以** ⇒ 两者结构上不可能给出矛盾指令。")
+
+
+def _corr_with_anchor(theme_df: pd.DataFrame,
+                      anchor_df: pd.DataFrame) -> Optional[float]:
+    """主题指数与宽基锚的日收益相关性（用于判断 RS 层是否退化）。"""
+    try:
+        a = _prepare_like(theme_df)
+        b = _prepare_like(anchor_df)
+    except Exception:
+        return None
+    j = pd.concat([a.rename("t"), b.rename("a")], axis=1, sort=True).dropna()
+    if len(j) < 200:
+        return None
+    v = float(j["t"].corr(j["a"]))
+    return v if np.isfinite(v) else None
+
+
+def _prepare_like(df: pd.DataFrame) -> pd.Series:
+    d = df[["date", "close"]].copy()
+    d["date"] = pd.to_datetime(d["date"], errors="coerce")
+    d["close"] = pd.to_numeric(d["close"], errors="coerce")
+    d = d.dropna().drop_duplicates(subset=["date"], keep="last").sort_values("date")
+    return d.set_index("date")["close"].astype(float).pct_change().dropna()
 
 
 def _last_span(mask: pd.Series):
@@ -70,8 +95,9 @@ def theme_status(theme: dict,
     name = theme.get("theme", "?")
     idx_code, anchor_code = theme.get("index"), theme.get("anchor")
     rec = {
-        "theme": name, "index": idx_code, "anchor": anchor_code,
-        "validated": False,
+        "theme": name, "kind": theme.get("kind", "theme"),
+        "index": idx_code, "anchor": anchor_code,
+        "validated": False, "rs_weak": False, "corr_with_anchor": None,
         "as_of": None, "bars": 0, "last_bar": None, "staleness_days": None,
         "available": False, "status": "", "warnings": [],
         "l1": False, "l2": False, "rs": False, "rs_available": idx_code != anchor_code,
@@ -151,6 +177,15 @@ def theme_status(theme: dict,
     else:
         rec["status"] = "➖ 无信号"
 
+    if rec["rs_available"]:
+        v = _corr_with_anchor(d, anchor_df)
+        rec["corr_with_anchor"] = None if v is None else round(v, 3)
+        if v is not None and v > RS_WEAK_CORR:
+            rec["rs_weak"] = True
+            rec["warnings"].append(
+                f"主题与锚日收益相关性 {v:.3f} > {RS_WEAK_CORR} ⇒ **RS 层近乎退化**"
+                f"（比价近乎常数），RS 点亮不可当独立证据")
+
     rec["available"] = True
     if not rec["rs_available"]:
         rec["warnings"].append("index == anchor ⇒ 比价恒为 1，RS 层不可用（N/A）")
@@ -185,27 +220,43 @@ def format_sentinel(rows: list, as_of=None) -> str:
     """ASCII 渲染（含**数据充分度**段与两条硬约束横幅）。"""
     lines = []
     lines.append("=" * 104)
+    n_th = sum(1 for r in rows if r.get("kind", "theme") == "theme")
     lines.append(f"主题转折观察哨 —— 观测日 {as_of or '(各序列最后一根)'}    "
-                 f"主题数 {len(rows)}")
+                 f"观察项 {len(rows)} 个（主题 {n_th} + 观察项 {len(rows) - n_th}）")
     lines.append("=" * 104)
     lines.append(f"  {VALIDATION_NOTE}")
     lines.append(f"  {DISCIPLINE_NOTE}")
     lines.append("  " + arbitration_note())
-    lines.append("")
-    lines.append(f"  {'主题':<15}{'指数':<9}{'锚':<9}{'根数':>6}  {'最后交易日':<12}"
-                 f"{'L1':>4}{'L2':>4}{'RS':>4}  状态")
-    lines.append("  " + "-" * 100)
-    for r in rows:
+    def _row(r) -> str:
         if not r["available"]:
-            lines.append(f"  {r['theme']:<15}{str(r['index']):<9}{str(r['anchor']):<9}"
-                         f"{r['bars']:>6}  {(r['last_bar'] or '-'):<12}"
-                         f"{'?':>4}{'?':>4}{'?':>4}  {r['status']}")
-            continue
-        rs = "✅" if r["rs"] else ("N/A" if not r["rs_available"] else "·")
-        lines.append(f"  {r['theme']:<15}{str(r['index']):<9}{str(r['anchor']):<9}"
-                     f"{r['bars']:>6}  {r['last_bar']:<12}"
-                     f"{'🔵' if r['l1'] else '·':>4}{'⚡' if r['l2'] else '·':>4}{rs:>4}"
-                     f"  {r['status']}")
+            return (f"  {r['theme']:<15}{str(r['index']):<9}{str(r['anchor']):<9}"
+                    f"{r['bars']:>6}  {(r['last_bar'] or '-'):<12}"
+                    f"{'?':>4}{'?':>4}{'?':>4}  {r['status']}")
+        rs = ("N/A" if not r["rs_available"]
+              else ("⚠️" if r["rs_weak"] else ("✅" if r["rs"] else "·")))
+        return (f"  {r['theme']:<15}{str(r['index']):<9}{str(r['anchor']):<9}"
+                f"{r['bars']:>6}  {r['last_bar']:<12}"
+                f"{'🔵' if r['l1'] else '·':>4}{'⚡' if r['l2'] else '·':>4}{rs:>4}"
+                f"  {r['status']}")
+
+    def _head(title: str) -> None:
+        lines.append("")
+        lines.append(f"  {title}")
+        lines.append(f"  {'主题':<15}{'指数':<9}{'锚':<9}{'根数':>6}  {'最后交易日':<12}"
+                     f"{'L1':>4}{'L2':>4}{'RS':>4}  状态")
+        lines.append("  " + "-" * 100)
+
+    themes = [r for r in rows if r.get("kind", "theme") == "theme"]
+    watch = [r for r in rows if r.get("kind", "theme") == "watch"]
+    if themes:
+        _head(f"【主题（含题材，进板块轮动面板）】共 {len(themes)} 个")
+        for r in themes:
+            lines.append(_row(r))
+    if watch:
+        _head(f"【观察项（**无题材**，不进板块轮动面板；且**不在 Phase 2 的验证范围内**）】"
+              f"共 {len(watch)} 个")
+        for r in watch:
+            lines.append(_row(r))
 
     lines.append("")
     lines.append("【数据充分度】")
@@ -213,12 +264,16 @@ def format_sentinel(rows: list, as_of=None) -> str:
     stale = [r for r in rows if r["available"] and (r["staleness_days"] or 0) > STALE_DAYS]
     short = [r for r in rows if r["available"] and r["bars"] < MIN_BARS]
     degenerate = [r for r in rows if r["available"] and not r["rs_available"]]
+    weak = [r for r in rows if r["available"] and r["rs_weak"]]
     lines.append(f"  · 可用 {len(rows) - len(bad)}/{len(rows)}   不可用 {len(bad)}   "
-                 f"过期 {len(stale)}   历史不足 {len(short)}   RS 不可用 {len(degenerate)}")
+                 f"过期 {len(stale)}   历史不足 {len(short)}   "
+                 f"RS 不可用 {len(degenerate)}   RS 退化 {len(weak)}")
     for r in bad:
         lines.append(f"  ❌ {r['theme']}: {r['status']}")
     for r in degenerate:
         lines.append(f"  ➖ {r['theme']}: RS 层 N/A（index == anchor）")
+    for r in weak:
+        lines.append(f"  ⚠️ {r['theme']}: RS 层退化（与锚相关 {r['corr_with_anchor']}）")
     for r in short:
         lines.append(f"  ⚠️ {r['theme']}: {'；'.join(r['warnings'])}")
 
@@ -229,7 +284,7 @@ def format_sentinel(rows: list, as_of=None) -> str:
         by_idx.setdefault(r["index"], []).append(r["theme"])
     for idx, names in sorted(by_idx.items(), key=lambda kv: (-len(kv[1]), str(kv[0]))):
         lines.append(f"  {str(idx):<9} {len(names)} 个主题: {', '.join(names)}")
-    lines.append(f"  ⇒ 共 {len(by_idx)} 条不同价格序列（主题数 {len(rows)}）")
+    lines.append(f"  ⇒ 共 {len(by_idx)} 条不同价格序列（观察项总数 {len(rows)}）")
 
     lines.append("")
     lines.append(f"  {DISCIPLINE_NOTE}")
@@ -238,6 +293,6 @@ def format_sentinel(rows: list, as_of=None) -> str:
 
 
 __all__ = [
-    "DISCIPLINE_NOTE", "VALIDATION_NOTE", "STALE_DAYS", "MIN_BARS",
+    "DISCIPLINE_NOTE", "VALIDATION_NOTE", "STALE_DAYS", "MIN_BARS", "RS_WEAK_CORR",
     "arbitration_note", "theme_status", "build_sentinel", "format_sentinel",
 ]

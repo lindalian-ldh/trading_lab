@@ -378,5 +378,195 @@
       "L1+L2+RS": 0.002
     },
     "note": "❌ 联合频次 0.63 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "红利",
+    "index": "sh000015",
+    "anchor": "sh000905",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 48,
+        "per_year": 6.01
+      },
+      "L2": {
+        "episodes": 14,
+        "per_year": 1.75
+      },
+      "RS": {
+        "episodes": 59,
+        "per_year": 7.39
+      },
+      "L1+L2": {
+        "episodes": 4,
+        "per_year": 0.5
+      },
+      "L1+L2+RS": {
+        "episodes": 2,
+        "per_year": 0.25
+      }
+    },
+    "day_share": {
+      "L1": 0.217,
+      "L2": 0.007,
+      "RS": 0.29,
+      "L1+L2": 0.002,
+      "L1+L2+RS": 0.001
+    },
+    "note": "❌ 联合频次 0.5 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "电力",
+    "index": "sh000937",
+    "anchor": "sh000300",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 31,
+        "per_year": 3.88
+      },
+      "L2": {
+        "episodes": 10,
+        "per_year": 1.25
+      },
+      "RS": {
+        "episodes": 54,
+        "per_year": 6.76
+      },
+      "L1+L2": {
+        "episodes": 1,
+        "per_year": 0.13
+      },
+      "L1+L2+RS": {
+        "episodes": 1,
+        "per_year": 0.13
+      }
+    },
+    "day_share": {
+      "L1": 0.141,
+      "L2": 0.005,
+      "RS": 0.238,
+      "L1+L2": 0.001,
+      "L1+L2+RS": 0.001
+    },
+    "note": "❌ 联合频次 0.13 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "有色金属",
+    "index": "sh000819",
+    "anchor": "sh000300",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 38,
+        "per_year": 4.76
+      },
+      "L2": {
+        "episodes": 12,
+        "per_year": 1.5
+      },
+      "RS": {
+        "episodes": 52,
+        "per_year": 6.51
+      },
+      "L1+L2": {
+        "episodes": 5,
+        "per_year": 0.63
+      },
+      "L1+L2+RS": {
+        "episodes": 4,
+        "per_year": 0.5
+      }
+    },
+    "day_share": {
+      "L1": 0.203,
+      "L2": 0.006,
+      "RS": 0.348,
+      "L1+L2": 0.003,
+      "L1+L2+RS": 0.002
+    },
+    "note": "❌ 联合频次 0.63 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "煤炭",
+    "index": "sz399998",
+    "anchor": "sh000300",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 42,
+        "per_year": 5.26
+      },
+      "L2": {
+        "episodes": 19,
+        "per_year": 2.38
+      },
+      "RS": {
+        "episodes": 71,
+        "per_year": 8.89
+      },
+      "L1+L2": {
+        "episodes": 4,
+        "per_year": 0.5
+      },
+      "L1+L2+RS": {
+        "episodes": 4,
+        "per_year": 0.5
+      }
+    },
+    "day_share": {
+      "L1": 0.185,
+      "L2": 0.01,
+      "RS": 0.347,
+      "L1+L2": 0.002,
+      "L1+L2+RS": 0.002
+    },
+    "note": "❌ 联合频次 0.5 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "银行",
+    "index": "sz399986",
+    "anchor": "sh000300",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 48,
+        "per_year": 6.01
+      },
+      "L2": {
+        "episodes": 14,
+        "per_year": 1.75
+      },
+      "RS": {
+        "episodes": 64,
+        "per_year": 8.02
+      },
+      "L1+L2": {
+        "episodes": 5,
+        "per_year": 0.63
+      },
+      "L1+L2+RS": {
+        "episodes": 1,
+        "per_year": 0.13
+      }
+    },
+    "day_share": {
+      "L1": 0.166,
+      "L2": 0.007,
+      "RS": 0.271,
+      "L1+L2": 0.003,
+      "L1+L2+RS": 0.001
+    },
+    "note": "❌ 联合频次 0.63 次/年 < 2.0 ⇒ 触发 kill criterion 3"
   }
 ]

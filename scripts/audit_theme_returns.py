@@ -60,7 +60,7 @@ from core.signal_stats import (  # noqa: E402
     two_sample_diff,
 )
 from core.theme_timing import EPISODE_GAP, layer_masks  # noqa: E402
-from core.theme_universe import THEMES  # noqa: E402
+from core.theme_universe import THEMES, WATCH_ONLY, all_observed  # noqa: E402
 
 A_START, A_END = "2016-01-01", "2020-12-31"
 B_START, B_END = "2021-01-01", "2023-12-31"
@@ -161,12 +161,14 @@ def main() -> int:
     ap.add_argument("--n-placebo", type=int, default=200)
     ap.add_argument("--online", action="store_true")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--themes-only", action="store_true",
+                    help="只看 THEMES（10 个含题材的主题），不含 WATCH_ONLY 观察项")
     args = ap.parse_args()
 
     holds = [int(x) for x in str(args.holds).split(",") if x.strip()]
     # 按**去重后的价格序列**跑（10 主题只有 5 条序列）
     series: dict = {}
-    for t in THEMES:
+    for t in (THEMES if args.themes_only else all_observed()):
         if not t.get("index"):
             continue
         if args.index and t["index"] not in args.index:

@@ -203,3 +203,79 @@ def test_save_ledger_skips_unavailable_rows(tmp_path):
     rows = sn.build_sentinel([THEME], lambda c: None)
     written, total = mod.save_ledger(rows, path=tmp_path / "x.csv")
     assert written == 0 and total == 0
+
+
+# ====================================================================
+# 观察项（WATCH_ONLY）与 RS 退化告警
+# ====================================================================
+
+def _rand_walk(n, shared=None, seed=0, scale=1.0, base=100.0):
+    rng = np.random.default_rng(seed)
+    inc = rng.normal(0, 1, n)
+    if shared is not None:
+        inc = shared + inc * scale
+    return base + np.cumsum(inc)
+
+
+def test_watch_only_shape_and_registered_indices():
+    """观察项必须是「无题材」的，且指数必须已登记进 INDEX_CODES（否则取数会炸）。"""
+    from core.marketdata_tx import INDEX_CODES
+    from core.theme_universe import WATCH_ONLY
+    assert len(WATCH_ONLY) >= 3
+    for t in WATCH_ONLY:
+        for k in ("theme", "kind", "plates", "etfs", "anchor", "index", "note"):
+            assert k in t, f"{t.get('theme')} 缺少 {k}"
+        assert t["kind"] == "watch"
+        assert tuple(t["plates"]) == (), "观察项不得带题材（否则会污染轮动面板）"
+        assert t["index"] in INDEX_CODES, f"{t['index']} 未登记进 INDEX_CODES"
+        assert t["anchor"] in INDEX_CODES, f"{t['anchor']} 未登记进 INDEX_CODES"
+
+
+def test_all_observed_is_themes_plus_watch_and_keeps_order():
+    from core.theme_universe import THEMES, WATCH_ONLY, all_observed
+    obs = all_observed()
+    assert len(obs) == len(THEMES) + len(WATCH_ONLY)
+    assert [t["theme"] for t in obs[:len(THEMES)]] == [t["theme"] for t in THEMES]
+    assert all(t.get("kind", "theme") == "theme" for t in THEMES)
+
+
+def test_sentinel_renders_two_sections():
+    watch = {"theme": "测试观察项", "kind": "watch", "index": "sz399363",
+             "anchor": "sz399006", "etfs": ()}
+    theme = {"theme": "测试主题", "index": "sz399363", "anchor": "sz399006", "etfs": ()}
+    rows = sn.build_sentinel([theme, watch], lambda c: _trend(200))
+    assert rows[0]["kind"] == "theme" and rows[1]["kind"] == "watch"
+    txt = sn.format_sentinel(rows)
+    assert "【主题" in txt and "【观察项" in txt
+    assert "不在 Phase 2 的验证范围内" in txt
+
+
+def test_rs_weak_flag_when_theme_tracks_anchor():
+    """主题与锚几乎同涨同跌 ⇒ 比价近乎常数 ⇒ 必须报警为「RS 退化」。"""
+    n = 400
+    rng = np.random.default_rng(7)
+    shared = rng.normal(0, 1, n)
+    theme = _mk(_rand_walk(n, shared=shared, seed=1, scale=0.1, base=100.0))
+    anchor = _mk(_rand_walk(n, shared=shared, seed=2, scale=0.1, base=50.0))
+    r = sn.theme_status(THEME, theme, anchor)
+    assert r["corr_with_anchor"] is not None and r["corr_with_anchor"] > sn.RS_WEAK_CORR
+    assert r["rs_weak"] is True
+    assert any("RS 层近乎退化" in w for w in r["warnings"])
+
+
+def test_rs_not_weak_for_independent_series():
+    n = 400
+    theme = _mk(_rand_walk(n, seed=11, base=100.0))
+    anchor = _mk(_rand_walk(n, seed=12, base=50.0))
+    r = sn.theme_status(THEME, theme, anchor)
+    assert r["rs_weak"] is False
+
+
+def test_rs_weak_is_reported_in_summary_section():
+    n = 400
+    rng = np.random.default_rng(3)
+    shared = rng.normal(0, 1, n)
+    theme = _mk(_rand_walk(n, shared=shared, seed=1, scale=0.1, base=100.0))
+    anchor = _mk(_rand_walk(n, shared=shared, seed=2, scale=0.1, base=50.0))
+    txt = sn.format_sentinel(sn.build_sentinel([THEME], lambda c: theme if c == THEME["index"] else anchor))
+    assert "RS 退化 1" in txt or "RS 退化" in txt

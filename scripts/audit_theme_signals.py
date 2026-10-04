@@ -44,7 +44,7 @@ if str(ROOT) not in sys.path:
 
 from core.marketdata_tx import fetch_index_history  # noqa: E402
 from core.theme_timing import EPISODE_GAP, episode_spans, layer_masks  # noqa: E402
-from core.theme_universe import THEMES  # noqa: E402
+from core.theme_universe import THEMES, WATCH_ONLY, all_observed  # noqa: E402
 
 WARMUP_END = "2015-12-31"
 MAIN_START = "2016-01-01"
@@ -102,9 +102,11 @@ def main() -> int:
     ap.add_argument("--gate", action="store_true",
                     help=f"任一主题联合频次 <{MIN_JOINT_PER_YEAR} 次/年 ⇒ 退出码 1")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--themes-only", action="store_true",
+                    help="只看 THEMES（10 个含题材的主题），不含 WATCH_ONLY 观察项")
     args = ap.parse_args()
 
-    rows = [audit_theme(t, online=args.online) for t in THEMES]
+    rows = [audit_theme(t, online=args.online) for t in (THEMES if args.themes_only else all_observed())]
 
     if args.json:
         print(json.dumps(rows, ensure_ascii=False, indent=2))

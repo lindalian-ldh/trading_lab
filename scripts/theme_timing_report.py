@@ -44,7 +44,7 @@ from core.theme_sentinel import (  # noqa: E402
     build_sentinel,
     format_sentinel,
 )
-from core.theme_universe import THEMES  # noqa: E402
+from core.theme_universe import THEMES, all_observed  # noqa: E402
 
 LEDGER = ROOT / "data" / "observations" / "theme_signal_ledger.csv"
 
@@ -115,9 +115,12 @@ def main() -> int:
     ap.add_argument("--save", action="store_true", help=f"追加到 {LEDGER.name}")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--gate", action="store_true", help="有主题数据不可用 ⇒ 退出码 1")
+    ap.add_argument("--themes-only", action="store_true",
+                    help="只看 THEMES（10 个含题材的主题），不含 WATCH_ONLY 观察项")
     args = ap.parse_args()
 
-    rows = build_sentinel(THEMES, _loader(args.online), as_of=args.date)
+    universe = THEMES if args.themes_only else all_observed()
+    rows = build_sentinel(universe, _loader(args.online), as_of=args.date)
 
     if args.json:
         print(json.dumps([{**r, "signal_family": SIGNAL_FAMILY, "discipline": DISCIPLINE_NOTE}

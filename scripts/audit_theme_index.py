@@ -43,7 +43,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.marketdata_tx import fetch_equity_history, fetch_index_history  # noqa: E402
-from core.theme_universe import THEMES  # noqa: E402
+from core.theme_universe import THEMES, WATCH_ONLY, all_observed  # noqa: E402
 
 MIN_YEARS = 10.0
 MIN_CORR = 0.8
@@ -131,9 +131,11 @@ def main() -> int:
     ap.add_argument("--online", action="store_true", help="联网刷新缓存")
     ap.add_argument("--gate", action="store_true", help="有 ❌/⚠️ 时退出码 1")
     ap.add_argument("--json", action="store_true", help="输出 JSON")
+    ap.add_argument("--themes-only", action="store_true",
+                    help="只看 THEMES（10 个含题材的主题），不含 WATCH_ONLY 观察项")
     args = ap.parse_args()
 
-    rows = [audit_theme(t, online=args.online) for t in THEMES]
+    rows = [audit_theme(t, online=args.online) for t in (THEMES if args.themes_only else all_observed())]
 
     if args.json:
         print(json.dumps(rows, ensure_ascii=False, indent=2))
