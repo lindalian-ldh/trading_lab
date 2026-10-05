@@ -279,3 +279,24 @@ def test_rs_weak_is_reported_in_summary_section():
     anchor = _mk(_rand_walk(n, shared=shared, seed=2, scale=0.1, base=50.0))
     txt = sn.format_sentinel(sn.build_sentinel([THEME], lambda c: theme if c == THEME["index"] else anchor))
     assert "RS 退化 1" in txt or "RS 退化" in txt
+
+
+def test_proxy_items_share_the_proxied_index():
+    """代理项必须**复用被代理主题的指数**（否则会把"重复"伪装成"独立覆盖"）。"""
+    from core.theme_universe import WATCH_ONLY, all_observed
+    by_name = {t["theme"]: t for t in all_observed()}
+    proxies = [t for t in WATCH_ONLY if t.get("proxy_of")]
+    assert proxies, "至少应有一个代理项（卫星/航天）"
+    for t in proxies:
+        assert t["proxy_of"] in by_name, f"{t['theme']} 的代理目标 {t['proxy_of']} 不存在"
+        assert t["index"] == by_name[t["proxy_of"]]["index"], (
+            f"{t['theme']} 应复用 {t['proxy_of']} 的指数，而不是另挑一个")
+
+
+def test_proxy_marker_is_rendered():
+    from core.theme_universe import all_observed
+    rows = sn.build_sentinel([t for t in all_observed() if t.get("proxy_of")],
+                             lambda c: _trend(200))
+    txt = sn.format_sentinel(rows)
+    assert "代理项" in txt
+    assert "(代理:" in txt

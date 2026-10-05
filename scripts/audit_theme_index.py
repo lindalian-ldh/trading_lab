@@ -47,6 +47,7 @@ from core.theme_universe import THEMES, WATCH_ONLY, all_observed  # noqa: E402
 
 MIN_YEARS = 10.0
 MIN_CORR = 0.8
+MIN_OVERLAP_WARN = 500      # 重叠不足 500 个交易日 ⇒ 相关性脆弱（约 2 年）
 TAIL_WINDOW = 500          # 近期窗口（约 2 年）—— 全区间相关性会掩盖近期脱钩
 
 
@@ -117,6 +118,12 @@ def audit_theme(theme: dict, online: bool) -> dict:
     else:
         rec["level"] = "ok"
         reasons.append(f"相关性 {max(corrs):.3f} ≥ {MIN_CORR}")
+        short_ov = [e for e in rec["etfs"]
+                    if e["corr"] is not None and e["overlap"] < MIN_OVERLAP_WARN]
+        if short_ov and len(short_ov) == len([e for e in rec["etfs"] if e["corr"] is not None]):
+            reasons.append(f"⚠️ 但全部重叠 <{MIN_OVERLAP_WARN} 个交易日"
+                           f"（最短 {min(e['overlap'] for e in short_ov)}）⇒ 相关性脆弱，"
+                           f"不可当稳定结论")
     if years < MIN_YEARS:
         tag = f"指数历史 {years:.1f}y < {MIN_YEARS:.0f}y"
         if rec["level"] == "ok":

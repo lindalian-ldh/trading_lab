@@ -720,5 +720,81 @@
       "L1+L2+RS": 0.002
     },
     "note": "❌ 联合频次 0.5 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "卫星",
+    "index": "sz399973",
+    "anchor": "sh000300",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 33,
+        "per_year": 4.13
+      },
+      "L2": {
+        "episodes": 13,
+        "per_year": 1.63
+      },
+      "RS": {
+        "episodes": 55,
+        "per_year": 6.89
+      },
+      "L1+L2": {
+        "episodes": 4,
+        "per_year": 0.5
+      },
+      "L1+L2+RS": {
+        "episodes": 3,
+        "per_year": 0.38
+      }
+    },
+    "day_share": {
+      "L1": 0.173,
+      "L2": 0.007,
+      "RS": 0.344,
+      "L1+L2": 0.002,
+      "L1+L2+RS": 0.002
+    },
+    "note": "❌ 联合频次 0.5 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "航天",
+    "index": "sz399973",
+    "anchor": "sh000300",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 33,
+        "per_year": 4.13
+      },
+      "L2": {
+        "episodes": 13,
+        "per_year": 1.63
+      },
+      "RS": {
+        "episodes": 55,
+        "per_year": 6.89
+      },
+      "L1+L2": {
+        "episodes": 4,
+        "per_year": 0.5
+      },
+      "L1+L2+RS": {
+        "episodes": 3,
+        "per_year": 0.38
+      }
+    },
+    "day_share": {
+      "L1": 0.173,
+      "L2": 0.007,
+      "RS": 0.344,
+      "L1+L2": 0.002,
+      "L1+L2+RS": 0.002
+    },
+    "note": "❌ 联合频次 0.5 次/年 < 2.0 ⇒ 触发 kill criterion 3"
   }
 ]

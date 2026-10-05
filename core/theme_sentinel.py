@@ -98,6 +98,7 @@ def theme_status(theme: dict,
     idx_code, anchor_code = theme.get("index"), theme.get("anchor")
     rec = {
         "theme": name, "kind": theme.get("kind", "theme"),
+        "proxy_of": theme.get("proxy_of"),
         "index": idx_code, "anchor": anchor_code,
         "validated": False, "rs_weak": False, "corr_with_anchor": None,
         "as_of": None, "bars": 0, "last_bar": None, "staleness_days": None,
@@ -232,14 +233,18 @@ def format_sentinel(rows: list, as_of=None) -> str:
     lines.append(f"  {VALIDATION_NOTE}")
     lines.append(f"  {DISCIPLINE_NOTE}")
     lines.append("  " + arbitration_note())
+    def _name(r) -> str:
+        lab = r["theme"] + (f"(代理:{r['proxy_of']})" if r.get("proxy_of") else "")
+        return f"{lab:<15}"
+
     def _row(r) -> str:
         if not r["available"]:
-            return (f"  {r['theme']:<15}{str(r['index']):<9}{str(r['anchor']):<9}"
+            return (f"  {_name(r)}{str(r['index']):<9}{str(r['anchor']):<9}"
                     f"{r['bars']:>6}  {(r['last_bar'] or '-'):<12}"
                     f"{'?':>4}{'?':>4}{'?':>4}  {r['status']}")
         rs = ("N/A" if not r["rs_available"]
               else ("⚠️" if r["rs_weak"] else ("✅" if r["rs"] else "·")))
-        return (f"  {r['theme']:<15}{str(r['index']):<9}{str(r['anchor']):<9}"
+        return (f"  {_name(r)}{str(r['index']):<9}{str(r['anchor']):<9}"
                 f"{r['bars']:>6}  {r['last_bar']:<12}"
                 f"{'🔵' if r['l1'] else '·':>4}{'⚡' if r['l2'] else '·':>4}{rs:>4}"
                 f"  {r['status']}")
@@ -289,6 +294,10 @@ def format_sentinel(rows: list, as_of=None) -> str:
 
     lines.append("")
     lines.append("【独立价格序列】（⚠️ 共用同一条指数 = 不是独立观测）")
+    proxies = [r for r in rows if r.get("proxy_of")]
+    if proxies:
+        lines.append(f"  ⚠️ 代理项 {len(proxies)} 个（无本主题指数，借用别的主题的指数）: "
+                     + ", ".join(f"{r['theme']}→{r['proxy_of']}" for r in proxies))
     by_idx: dict = {}
     for r in rows:
         by_idx.setdefault(r["index"], []).append(r["theme"])
