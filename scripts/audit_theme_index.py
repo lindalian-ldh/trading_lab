@@ -121,7 +121,8 @@ def audit_theme(theme: dict, online: bool) -> dict:
         tag = f"指数历史 {years:.1f}y < {MIN_YEARS:.0f}y"
         if rec["level"] == "ok":
             rec["level"] = "warn"
-        reasons.append(tag + "（用户 2026-10-04 决定：接受该窗口并记入文档）")
+        reasons.append(tag + "（2026-10-04 决定：接受该窗口并记入文档，"
+                             "但**不作为验证依据**）")
     rec["verdict"] = "；".join(reasons)
     return rec
 

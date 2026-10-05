@@ -568,5 +568,157 @@
       "L1+L2+RS": 0.001
     },
     "note": "❌ 联合频次 0.63 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "军工",
+    "index": "sz399973",
+    "anchor": "sh000300",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 33,
+        "per_year": 4.13
+      },
+      "L2": {
+        "episodes": 13,
+        "per_year": 1.63
+      },
+      "RS": {
+        "episodes": 55,
+        "per_year": 6.89
+      },
+      "L1+L2": {
+        "episodes": 4,
+        "per_year": 0.5
+      },
+      "L1+L2+RS": {
+        "episodes": 3,
+        "per_year": 0.38
+      }
+    },
+    "day_share": {
+      "L1": 0.173,
+      "L2": 0.007,
+      "RS": 0.344,
+      "L1+L2": 0.002,
+      "L1+L2+RS": 0.002
+    },
+    "note": "❌ 联合频次 0.5 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "创新药",
+    "index": "sz399441",
+    "anchor": "sh000300",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 44,
+        "per_year": 5.51
+      },
+      "L2": {
+        "episodes": 13,
+        "per_year": 1.63
+      },
+      "RS": {
+        "episodes": 54,
+        "per_year": 6.76
+      },
+      "L1+L2": {
+        "episodes": 6,
+        "per_year": 0.75
+      },
+      "L1+L2+RS": {
+        "episodes": 4,
+        "per_year": 0.5
+      }
+    },
+    "day_share": {
+      "L1": 0.228,
+      "L2": 0.007,
+      "RS": 0.387,
+      "L1+L2": 0.003,
+      "L1+L2+RS": 0.002
+    },
+    "note": "❌ 联合频次 0.75 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "机器人",
+    "index": "sz399283",
+    "anchor": "sh000300",
+    "bars": 943,
+    "years": 3.86,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 17,
+        "per_year": 4.4
+      },
+      "L2": {
+        "episodes": 4,
+        "per_year": 1.04
+      },
+      "RS": {
+        "episodes": 25,
+        "per_year": 6.48
+      },
+      "L1+L2": {
+        "episodes": 2,
+        "per_year": 0.52
+      },
+      "L1+L2+RS": {
+        "episodes": 2,
+        "per_year": 0.52
+      }
+    },
+    "day_share": {
+      "L1": 0.163,
+      "L2": 0.004,
+      "RS": 0.39,
+      "L1+L2": 0.002,
+      "L1+L2+RS": 0.002
+    },
+    "note": "❌ 联合频次 0.52 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "证券",
+    "index": "sz399975",
+    "anchor": "sh000300",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 34,
+        "per_year": 4.26
+      },
+      "L2": {
+        "episodes": 13,
+        "per_year": 1.63
+      },
+      "RS": {
+        "episodes": 52,
+        "per_year": 6.51
+      },
+      "L1+L2": {
+        "episodes": 4,
+        "per_year": 0.5
+      },
+      "L1+L2+RS": {
+        "episodes": 3,
+        "per_year": 0.38
+      }
+    },
+    "day_share": {
+      "L1": 0.148,
+      "L2": 0.007,
+      "RS": 0.304,
+      "L1+L2": 0.002,
+      "L1+L2+RS": 0.002
+    },
+    "note": "❌ 联合频次 0.5 次/年 < 2.0 ⇒ 触发 kill criterion 3"
   }
 ]

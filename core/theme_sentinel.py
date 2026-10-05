@@ -43,6 +43,8 @@ VALIDATION_NOTE = ("❌ 未通过 P0.5 预注册判据（L1 t=−0.42~+1.00；�
 STALE_DAYS = 5
 #: 观测可信所需最少根数
 MIN_BARS = 60
+#: 「≥10 年」的根数门槛（约 2430 根）—— 低于它只能观察、不能当验证依据
+SHORT_HISTORY_BARS = 2430
 #: 主题与锚的日收益相关性超过此值 ⇒ **RS 层近乎退化**（比价近乎常数）
 RS_WEAK_CORR = 0.85
 
@@ -137,6 +139,9 @@ def theme_status(theme: dict,
         return rec
     if rec["bars"] < MIN_BARS:
         rec["warnings"].append(f"历史仅 {rec['bars']} 根 < {MIN_BARS}，均线/摆动点未预热")
+    elif rec["bars"] < SHORT_HISTORY_BARS:
+        rec["warnings"].append(
+            f"历史 {rec['bars']} 根 < {SHORT_HISTORY_BARS}（≈10 年）⇒ 只能观察、不作验证依据")
 
     a = anchor_df if rec["rs_available"] else None
     masks = layer_masks(d, a).reset_index(drop=True)
@@ -263,15 +268,20 @@ def format_sentinel(rows: list, as_of=None) -> str:
     bad = [r for r in rows if not r["available"]]
     stale = [r for r in rows if r["available"] and (r["staleness_days"] or 0) > STALE_DAYS]
     short = [r for r in rows if r["available"] and r["bars"] < MIN_BARS]
+    hist_short = [r for r in rows if r["available"] and MIN_BARS <= r["bars"] < SHORT_HISTORY_BARS]
     degenerate = [r for r in rows if r["available"] and not r["rs_available"]]
     weak = [r for r in rows if r["available"] and r["rs_weak"]]
     lines.append(f"  · 可用 {len(rows) - len(bad)}/{len(rows)}   不可用 {len(bad)}   "
-                 f"过期 {len(stale)}   历史不足 {len(short)}   "
+                 f"过期 {len(stale)}   预热不足 {len(short)}   "
+                 f"历史<10年 {len(hist_short)}   "
                  f"RS 不可用 {len(degenerate)}   RS 退化 {len(weak)}")
     for r in bad:
         lines.append(f"  ❌ {r['theme']}: {r['status']}")
     for r in degenerate:
         lines.append(f"  ➖ {r['theme']}: RS 层 N/A（index == anchor）")
+    for r in hist_short:
+        lines.append(f"  ⚠️ {r['theme']}: 历史 {r['bars']} 根 < {SHORT_HISTORY_BARS}（≈10 年）"
+                     f"⇒ **只观察、不作验证依据**")
     for r in weak:
         lines.append(f"  ⚠️ {r['theme']}: RS 层退化（与锚相关 {r['corr_with_anchor']}）")
     for r in short:
@@ -293,6 +303,7 @@ def format_sentinel(rows: list, as_of=None) -> str:
 
 
 __all__ = [
-    "DISCIPLINE_NOTE", "VALIDATION_NOTE", "STALE_DAYS", "MIN_BARS", "RS_WEAK_CORR",
+    "DISCIPLINE_NOTE", "VALIDATION_NOTE", "STALE_DAYS", "MIN_BARS",
+    "SHORT_HISTORY_BARS", "RS_WEAK_CORR",
     "arbitration_note", "theme_status", "build_sentinel", "format_sentinel",
 ]
