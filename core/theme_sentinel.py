@@ -245,6 +245,8 @@ def format_sentinel(rows: list, as_of=None) -> str:
                  f"观察项 {len(rows)} 个（主题 {n_th} + 观察项 {len(rows) - n_th}）")
     lines.append("=" * 104)
     lines.append(f"  {VALIDATION_NOTE}")
+    lines.append("  RS 列：✅=比价走强  ·=未走强  N/A=index 与 anchor 同一个（比价恒为 1）  "
+                 f"⚠️=主题与锚相关 >{RS_WEAK_CORR}（比价近乎常数，**该层不可信**）")
     lines.append(f"  {DISCIPLINE_NOTE}")
     lines.append("  " + arbitration_note())
     def _name(r) -> str:
@@ -256,8 +258,14 @@ def format_sentinel(rows: list, as_of=None) -> str:
             return (f"  {_name(r)}{str(r['index']):<15}{str(r['anchor']):<9}"
                     f"{r['bars']:>6}  {(r['last_bar'] or '-'):<12}"
                     f"{'?':>4}{'?':>4}{'?':>4}  {r['status']}")
-        rs = ("N/A" if not r["rs_available"]
-              else ("⚠️" if r["rs_weak"] else ("✅" if r["rs"] else "·")))
+        # RS 列：退化时**同时**显示退化告警与点亮状态（⚠️✅ / ⚠️·），
+        # 否则"⚠️"会把"到底亮没亮"盖住（2026-10-05 用户提问暴露的歧义）
+        if not r["rs_available"]:
+            rs = "N/A"
+        elif r["rs_weak"]:
+            rs = "⚠️✅" if r["rs"] else "⚠️·"
+        else:
+            rs = "✅" if r["rs"] else "·"
         return (f"  {_name(r)}{str(r['index']):<15}{str(r['anchor']):<9}"
                 f"{r['bars']:>6}  {r['last_bar']:<12}"
                 f"{'🔵' if r['l1'] else '·':>4}{'⚡' if r['l2'] else '·':>4}{rs:>4}"
@@ -322,6 +330,8 @@ def format_sentinel(rows: list, as_of=None) -> str:
     lines.append("")
     lines.append(f"  {DISCIPLINE_NOTE}")
     lines.append(f"  {VALIDATION_NOTE}")
+    lines.append("  RS 列：✅=比价走强  ·=未走强  N/A=index 与 anchor 同一个（比价恒为 1）  "
+                 f"⚠️=主题与锚相关 >{RS_WEAK_CORR}（比价近乎常数，**该层不可信**）")
     return "\n".join(lines)
 
 

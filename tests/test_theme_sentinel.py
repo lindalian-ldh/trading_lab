@@ -344,5 +344,19 @@ def test_rs_only_label_when_no_recent_l1():
         assert "相对强度走强" in r["status"]
 
 
+def test_rs_column_shows_both_weak_and_lit_state():
+    """退化时必须同时显示告警与点亮状态，不能只给一个 ⚠️ 把信息盖住。"""
+    n = 400
+    rng = np.random.default_rng(11)
+    shared = rng.normal(0, 1, n)
+    theme = _mk(_rand_walk(n, shared=shared, seed=1, scale=0.1, base=100.0))
+    anchor = _mk(_rand_walk(n, shared=shared, seed=2, scale=0.1, base=50.0))
+    rows = sn.build_sentinel([THEME], lambda c: theme if c == THEME["index"] else anchor)
+    assert rows[0]["rs_weak"] is True
+    txt = sn.format_sentinel(rows)
+    assert "⚠️✅" in txt or "⚠️·" in txt
+    assert "该层不可信" in txt
+
+
 def test_recent_span_days_constant_is_sane():
     assert 5 <= sn.RECENT_SPAN_DAYS <= 60
