@@ -28,7 +28,7 @@ from typing import Callable, Optional
 import numpy as np
 import pandas as pd
 
-from core.theme_timing import EPISODE_GAP, episode_spans, layer_masks
+from core.theme_timing import EPISODE_GAP, episode_spans, l1_pending, layer_masks
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,9 @@ MIN_BARS = 60
 SHORT_HISTORY_BARS = 2430
 #: 主题与锚的日收益相关性超过此值 ⇒ **RS 层近乎退化**（比价近乎常数）
 RS_WEAK_CORR = 0.85
+#: 「结构已破」标签只在最近这么多**交易日**内曾点亮过 L1 时才用
+#  （否则几乎所有序列都满足"历史上曾转多" ⇒ 标签退化成常量、毫无信息）
+RECENT_SPAN_DAYS = 20
 
 
 def arbitration_note() -> str:
@@ -105,6 +108,7 @@ def theme_status(theme: dict,
         "available": False, "status": "", "warnings": [],
         "l1": False, "l2": False, "rs": False, "rs_available": idx_code != anchor_code,
         "l1_state_days": 0, "l1_span_start": None, "l1_span_end": None,
+        "l1_span_end_days_ago": None, "l1_pending": False,
         "l2_recent_days_ago": None, "close": None,
     }
 
@@ -145,6 +149,7 @@ def theme_status(theme: dict,
             f"历史 {rec['bars']} 根 < {SHORT_HISTORY_BARS}（≈10 年）⇒ 只能观察、不作验证依据")
 
     a = anchor_df if rec["rs_available"] else None
+    d_ohlc = d.copy()          # 保留 OHLC：l1_pending 需要 high/low
     masks = layer_masks(d, a).reset_index(drop=True)
     # 用 masks 自己回带 date/close —— 保证与掩码**逐行对齐**（_prepare 可能去重/剔 NaN）
     d = masks[["date", "close"]].copy()
@@ -160,24 +165,33 @@ def theme_status(theme: dict,
         s, e, n = sp
         rec["l1_span_start"] = d["date"].iloc[s].date().isoformat()
         rec["l1_span_end"] = d["date"].iloc[e].date().isoformat()
+        rec["l1_span_end_days_ago"] = int(len(d) - 1 - e)
         if rec["l1"]:
             rec["l1_state_days"] = n
+
+    # 「条件已满足、等下一根确认」——只可能在最后一根上（否则掩码早就点亮了）
+    rec["l1_pending"] = (not rec["l1"]) and bool(l1_pending(d_ohlc))
 
     l2_pos = np.where(masks["L2"].to_numpy(bool))[0]
     if len(l2_pos):
         rec["l2_recent_days_ago"] = int(len(d) - 1 - l2_pos[-1])
 
     # —— 只显示的状态标签（优先级从高到低）——
+    rs_txt = "（RS 亦走强）" if (rec["rs"] and rec["rs_available"]) else ""
     if rec["l1"] and rec["l2"]:
-        rec["status"] = "🔵🔵 结构+均线双确认（观察）"
+        rec["status"] = "🔵🔵 结构+均线双确认（观察）" + rs_txt
     elif rec["l1"] and rec["rs"]:
         rec["status"] = "🔵📈 结构转多 + 相对强度（观察）"
     elif rec["l1"]:
         days = rec["l1_state_days"]
-        rec["status"] = (f"🔵 结构转多（观察，第 {days} 日）" if days <= 1
-                         else f"🔹 结构维持（观察，已 {days} 日）")
-    elif rec["l1_span_end"] is not None:
-        rec["status"] = "➖ 结构已破（观察期内曾转多）"
+        rec["status"] = (f"🔵 结构转多（观察，第 {days} 日）{rs_txt}" if days <= 1
+                         else f"🔹 结构维持（观察，已 {days} 日）{rs_txt}")
+    elif rec["l1_pending"]:
+        rec["status"] = "⏳ 结构条件已满足，待下一根 K 线确认" + rs_txt
+    elif (rec["l1_span_end_days_ago"] is not None
+          and rec["l1_span_end_days_ago"] <= RECENT_SPAN_DAYS):
+        rec["status"] = (f"➖ 结构已破（{rec['l1_span_end_days_ago']} 个交易日前曾转多）"
+                         + rs_txt)
     elif rec["rs"] and rec["rs_available"]:
         rec["status"] = "📈 相对强度走强（价格未转多）"
     else:
@@ -313,6 +327,6 @@ def format_sentinel(rows: list, as_of=None) -> str:
 
 __all__ = [
     "DISCIPLINE_NOTE", "VALIDATION_NOTE", "STALE_DAYS", "MIN_BARS",
-    "SHORT_HISTORY_BARS", "RS_WEAK_CORR",
+    "SHORT_HISTORY_BARS", "RS_WEAK_CORR", "RECENT_SPAN_DAYS",
     "arbitration_note", "theme_status", "build_sentinel", "format_sentinel",
 ]

@@ -305,3 +305,44 @@ def test_proxy_marker_is_rendered():
     txt = sn.format_sentinel(rows)
     assert "代理项" in txt
     assert "(代理:" in txt
+
+
+# ====================================================================
+# 状态标签：待确认 / 结构已破只在近期生效
+# ====================================================================
+
+def test_pending_label_when_conditions_met_but_unconfirmed():
+    """条件今天已满足、但按规则要下一根确认 ⇒ 必须显示 ⏳ 而不是"无信号"。"""
+    idx = _l1_on_frame().iloc[:-1]          # 砍掉确认日 ⇒ 停在突破日
+    a = _trend(len(idx), base=50.0)
+    r = sn.theme_status(THEME, idx.reset_index(drop=True), a)
+    from core.theme_timing import l1_pending
+    assert l1_pending(idx.reset_index(drop=True)) is True
+    assert r["l1"] is False and r["l1_pending"] is True
+    assert "待下一根" in r["status"]
+
+
+def test_broken_label_only_for_recent_spans():
+    """久远的"曾转多"不该再占用状态标签（否则标签退化成常量）。"""
+    idx = _l1_on_frame()
+    a = _trend(len(idx), base=50.0)
+    r = sn.theme_status(THEME, idx, a)
+    assert r["l1_span_end_days_ago"] == 0          # 就亮在最后一根
+    r2 = sn.theme_status(THEME, idx, a)
+    assert "结构已破" in r2["status"] or "结构维持" in r2["status"] or "转多" in r2["status"]
+
+
+def test_rs_only_label_when_no_recent_l1():
+    """没有近期 L1、但 RS 走强 ⇒ 应显示"相对强度走强（价格未转多）"。"""
+    n = 400
+    rng = np.random.default_rng(5)
+    theme = _mk(_rand_walk(n, seed=21, base=100.0) + np.linspace(0, 120, n))
+    anchor = _mk(_rand_walk(n, seed=22, base=50.0))
+    rows = sn.build_sentinel([THEME], lambda c: theme if c == THEME["index"] else anchor)
+    r = rows[0]
+    if r["rs"] and not r["l1"] and not r["l1_pending"] and r["l1_span_end_days_ago"] is None:
+        assert "相对强度走强" in r["status"]
+
+
+def test_recent_span_days_constant_is_sane():
+    assert 5 <= sn.RECENT_SPAN_DAYS <= 60

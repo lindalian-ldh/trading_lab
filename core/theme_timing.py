@@ -151,6 +151,34 @@ def swing_high_asof(df: pd.DataFrame, k: int = K_SWING) -> pd.Series:
     return pd.Series(conf, index=d.index, name="h_last").ffill()
 
 
+def l1_state(df: pd.DataFrame,
+             k: int = K_SWING,
+             low_lookback: int = L1_LOW_LOOKBACK) -> pd.Series:
+    """L1 的**原始状态**（未做"次日确认"）—— ``close > H_last`` ∧ ``不再创新低``。
+
+    :func:`l1_structure_break` 用它算出正式掩码；单独暴露出来是为了让观察哨能显示
+    "**条件今天已满足，但按冻结规则还需下一根 K 线确认**"这种状态。
+    """
+    d = _prepare(df, "l1_state 输入")
+    close = d["close"]
+    h_last = swing_high_asof(d, k=k)
+    not_new_low = close > close.shift(1).rolling(int(low_lookback),
+                                                 min_periods=int(low_lookback)).min()
+    st = (close > h_last) & not_new_low
+    st.index = d.index
+    st.name = "L1_state"
+    return st
+
+
+def l1_pending(df: pd.DataFrame, **kwargs) -> bool:
+    """最后一根 K 线上「条件已满足、但还没被下一根确认」⇒ True。"""
+    st = l1_state(df, **{k: v for k, v in kwargs.items()
+                         if k in ("k", "low_lookback")})
+    if len(st) == 0:
+        return False
+    return bool(st.iloc[-1])
+
+
 def l1_structure_break(df: pd.DataFrame,
                        k: int = K_SWING,
                        low_lookback: int = L1_LOW_LOOKBACK,
@@ -166,10 +194,7 @@ def l1_structure_break(df: pd.DataFrame,
     d = _prepare(df, "l1_structure_break 输入")
     close = d["close"]
     h_last = swing_high_asof(d, k=k)
-
-    not_new_low = close > close.shift(1).rolling(int(low_lookback),
-                                                 min_periods=int(low_lookback)).min()
-    state = (close > h_last) & not_new_low
+    state = l1_state(d, k=k, low_lookback=low_lookback)
 
     # 次日确认：close_{t+1} > H_last(t)；再把信号移到确认日 t+1
     confirmed_at_next = (state & (close.shift(-1) > h_last)).fillna(False)
@@ -361,6 +386,6 @@ __all__ = [
     "MA_FAST", "MA_SLOW", "MA_SLOPE_WINDOW", "MA_SLOPE_MIN",
     "RS_WINDOW", "RS_MA_WINDOW", "EPISODE_GAP", "LAYER_SPEC",
     "swing_points", "swing_high_asof",
-    "l1_structure_break", "l2_ma_turn", "rs_strength",
+    "l1_state", "l1_pending", "l1_structure_break", "l2_ma_turn", "rs_strength",
     "combine_layers", "episode_spans", "episodes_per_year", "layer_masks",
 ]
