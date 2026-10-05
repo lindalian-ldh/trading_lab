@@ -30,6 +30,7 @@ ETF 自身历史又太短（稀土 ETF 只有 5.1~5.6 年）⇒ 唯一出路是*
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Callable, Iterable, Optional
 
 import numpy as np
@@ -49,6 +50,57 @@ BASE_LEVEL = 1000.0
 MIN_CORR = 0.8
 #: 重叠不足此日数 ⇒ 相关性不可信（只作提示）
 MIN_OVERLAP = 200
+
+
+#: 合成指数在代码体系里的前缀：``synth:稀土`` ⇒ ``data/cache/synth_稀土_history.csv``
+SYNTH_PREFIX = "synth:"
+
+
+def is_synth_code(code) -> bool:
+    return str(code or "").startswith(SYNTH_PREFIX)
+
+
+def synth_name(code) -> str:
+    return str(code)[len(SYNTH_PREFIX):].strip()
+
+
+def synth_cache_path(name: str, cache_dir=None) -> Path:
+    root = Path(cache_dir) if cache_dir is not None else _default_cache_dir()
+    return root / f"synth_{name}_history.csv"
+
+
+def _default_cache_dir() -> Path:
+    from config.settings import PROJECT_ROOT
+    return Path(PROJECT_ROOT) / "data" / "cache"
+
+
+def load_synth(code, *, cache_dir=None, bars=None) -> Optional[pd.DataFrame]:
+    """读合成指数缓存（``synth:名称``）。文件不存在或损坏返回 None 并打 WARNING。"""
+    import logging as _logging
+    name = synth_name(code)
+    path = synth_cache_path(name, cache_dir=cache_dir)
+    if not path.exists():
+        _logging.getLogger(__name__).warning(
+            "合成指数缓存不存在: %s（先用 scripts/build_synth_index.py --save 生成）", path)
+        return None
+    try:
+        df = pd.read_csv(path, encoding="utf-8-sig")
+    except Exception as e:                                  # pragma: no cover
+        _logging.getLogger(__name__).warning("合成指数读取失败: %s → %s", path, e)
+        return None
+    if df is None or df.empty or "date" not in df.columns or "close" not in df.columns:
+        _logging.getLogger(__name__).warning("合成指数内容不合法: %s", path)
+        return None
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    for c in ("open", "high", "low", "close"):
+        df[c] = pd.to_numeric(df.get(c, df["close"]), errors="coerce")
+        if c != "close":
+            df[c] = df[c].fillna(df["close"])               # 老文件缺 OHLC 时用收盘兜底
+    df = df.dropna(subset=["date", "close"]).sort_values("date")
+    df = df.drop_duplicates(subset=["date"], keep="last").reset_index(drop=True)
+    if bars:
+        df = df.tail(int(bars)).reset_index(drop=True)
+    return df
 
 
 def to_tx_codes(codes: Iterable[str]) -> tuple:
@@ -139,27 +191,104 @@ def build_index_from_prices(prices: dict, constituents: pd.DataFrame,
                             *, start: str = SYNTH_START,
                             min_members: int = MIN_MEMBERS,
                             base: float = BASE_LEVEL) -> pd.DataFrame:
-    """由 ``{腾讯代码: 收盘价 Series}`` 合成指数（内部先算日收益）。
+    """由 ``{腾讯代码: 收盘价 Series}`` 合成指数。
 
-    **收盘价必须是前复权价**（见模块 docstring 第 5 条）。
+    只是 :func:`build_index_from_ohlc` 的薄包装（``open=high=low=close``）。
+    ⚠️ 真要喂给 L1（摆动点用 high/low）时**请用** :func:`build_index_from_ohlc`，
+    否则摆动点会退化成"收盘价极值"。
     """
-    if not prices:
-        return pd.DataFrame(columns=["date", "close", "ret", "n_members", "n_missing"])
-    series = {}
-    for code, s in prices.items():
-        if s is None or len(s) == 0:
+    frames = {}
+    for code, ser in (prices or {}).items():
+        if ser is None or len(ser) == 0:
             continue
-        x = pd.Series(s).copy()
+        x = pd.Series(ser).copy()
         x.index = pd.to_datetime(x.index)
         x = pd.to_numeric(x, errors="coerce")
         x = x[~x.index.duplicated(keep="last")].sort_index()
-        series[code] = x
-    if not series:
-        return pd.DataFrame(columns=["date", "close", "ret", "n_members", "n_missing"])
-    px = pd.DataFrame(series).sort_index()
-    rets = px.pct_change()
-    rets = rets.iloc[1:]                     # 第一根没有收益
-    return build_index(rets, constituents, start=start, min_members=min_members, base=base)
+        frames[code] = pd.DataFrame({"date": x.index, "open": x.to_numpy(),
+                                     "high": x.to_numpy(), "low": x.to_numpy(),
+                                     "close": x.to_numpy()})
+    return build_index_from_ohlc(frames, constituents, start=start,
+                                 min_members=min_members, base=base)
+
+
+def build_index_from_ohlc(frames: dict, constituents: pd.DataFrame,
+                          *, start: str = SYNTH_START,
+                          min_members: int = MIN_MEMBERS,
+                          base: float = BASE_LEVEL) -> pd.DataFrame:
+    """由**个股 OHLC** 合成带 OHLC 的等权指数（**不是**拿 close 假装高开低）。
+
+    为什么必须真合成 OHLC：L1 的摆动点用 ``high`` / ``low`` 判极值
+    （P0.5 冻结基准 §①）；只给 close 会让摆动点退化成"收盘价极值"，
+    与 ETF 上的判定口径不一致。
+
+    口径（与前一根**收盘**比，权重与收益口径一致，均为当日有效成分股的算术平均）：
+
+    ```
+    close_t = level_{t-1} × mean( close_it / close_i,t-1 )
+    open_t  = level_{t-1} × mean( open_it  / close_i,t-1 )
+    high_t  = level_{t-1} × mean( high_it  / close_i,t-1 )
+    low_t   = level_{t-1} × mean( low_it   / close_i,t-1 )
+    ```
+    ``level`` 由 ``close`` 链式累乘得到 ⇒ ``close`` 列与 :func:`build_index` 完全一致。
+
+    Args:
+        frames: ``{腾讯代码: DataFrame(date/open/high/low/close)}``。
+    """
+    cols = ("open", "high", "low", "close")
+    ratios, close_px, valid_src = {}, {}, {}
+    for code, df in (frames or {}).items():
+        if df is None or len(df) == 0:
+            continue
+        d = df[["date", *[c for c in cols if c in df.columns]]].copy()
+        d["date"] = pd.to_datetime(d["date"], errors="coerce")
+        for c in cols:
+            d[c] = pd.to_numeric(d.get(c), errors="coerce")
+        if "close" not in d.columns:
+            continue
+        d = d.dropna(subset=["date", "close"]).drop_duplicates(subset=["date"], keep="last")
+        d = d.sort_values("date").set_index("date")
+        prev = d["close"].shift(1)
+        close_px[code] = d["close"]
+        valid_src[code] = (prev.notna() & (prev > 0))
+        for c in cols:
+            ratios[(code, c)] = (d[c] / prev) if c in d.columns else pd.Series(np.nan, index=d.index)
+    if not close_px:
+        return pd.DataFrame(columns=["date", *cols, "ret", "n_members", "n_missing"])
+
+    px = pd.DataFrame(close_px).sort_index()
+    px = px[px.index >= pd.Timestamp(start)]
+    if px.empty:
+        return pd.DataFrame(columns=["date", *cols, "ret", "n_members", "n_missing"])
+    memb = membership_table(constituents, px.index, codes=list(px.columns))
+    ok = pd.DataFrame({c: valid_src[c].reindex(px.index).fillna(False).to_numpy(bool)
+                       for c in px.columns}, index=px.index)
+    valid = px.notna() & memb & ok
+    n = valid.sum(axis=1)
+
+    def _mean_ratio(field: str) -> pd.Series:
+        r = pd.DataFrame({c: ratios[(c, field)].reindex(px.index) for c in px.columns})
+        return r.where(valid).mean(axis=1)
+
+    r_close = _mean_ratio("close")
+    idx_ret = r_close - 1.0
+    idx_ret = idx_ret.where(n >= int(min_members))
+    level = base * (1.0 + idx_ret.fillna(0.0)).cumprod()
+    level = level.where(n >= int(min_members))      # 成分股不足 ⇒ NaN，不外推
+    prev_level = level.shift(1)
+    prev_level.iloc[0] = base
+    out = {"date": px.index, "close": level}
+    for c in ("open", "high", "low"):
+        out[c] = (prev_level * _mean_ratio(c)).where(n >= int(min_members))
+    out["ret"] = idx_ret
+    out["n_members"] = n
+    out["n_missing"] = memb.sum(axis=1) - n
+    res = pd.DataFrame(out).reset_index(drop=True)
+    if res["close"].notna().any():
+        first = res["close"].first_valid_index()
+        for c in ("open", "high", "low"):
+            res.loc[first, c] = res.loc[first, "close"]     # 第一根没有前收，用收盘兜底
+    return res[["date", "open", "high", "low", "close", "ret", "n_members", "n_missing"]]
 
 
 def correlation(synth: pd.DataFrame, other: pd.DataFrame,
@@ -192,6 +321,7 @@ def correlation(synth: pd.DataFrame, other: pd.DataFrame,
 
 __all__ = [
     "SYNTH_START", "MIN_MEMBERS", "BASE_LEVEL", "MIN_CORR", "MIN_OVERLAP",
+    "SYNTH_PREFIX", "is_synth_code", "synth_name", "synth_cache_path", "load_synth",
     "to_tx_codes", "membership_table", "build_index", "build_index_from_prices",
-    "correlation",
+    "build_index_from_ohlc", "correlation",
 ]

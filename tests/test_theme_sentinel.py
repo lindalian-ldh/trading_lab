@@ -227,7 +227,12 @@ def test_watch_only_shape_and_registered_indices():
             assert k in t, f"{t.get('theme')} 缺少 {k}"
         assert t["kind"] == "watch"
         assert tuple(t["plates"]) == (), "观察项不得带题材（否则会污染轮动面板）"
-        assert t["index"] in INDEX_CODES, f"{t['index']} 未登记进 INDEX_CODES"
+        if str(t["index"]).startswith("synth:"):
+            from core.synth_index import load_synth
+            assert load_synth(t["index"]) is not None, \
+                f"{t['index']} 是合成指数但缓存不存在（先跑 build_synth_index.py --save）"
+        else:
+            assert t["index"] in INDEX_CODES, f"{t['index']} 未登记进 INDEX_CODES"
         assert t["anchor"] in INDEX_CODES, f"{t['anchor']} 未登记进 INDEX_CODES"
 
 

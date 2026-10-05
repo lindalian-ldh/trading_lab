@@ -576,7 +576,15 @@ def fetch_history(code: str,
 
 
 def fetch_index_history(code: str, **kwargs) -> Optional[pd.DataFrame]:
-    """取**指数**日线。等价于 ``fetch_history(code, kind='index', ...)``。"""
+    """取**指数**日线。等价于 ``fetch_history(code, kind='index', ...)``。
+
+    特例：``code`` 以 ``synth:`` 开头时读**合成指数**缓存
+    （``data/cache/synth_{名称}_history.csv``，由 ``scripts/build_synth_index.py --save`` 生成）。
+    这样观察哨与三个审计脚本**无需改动**即可使用合成指数。
+    """
+    if str(code or "").startswith("synth:"):
+        from core.synth_index import load_synth
+        return load_synth(code, bars=kwargs.get("bars"), cache_dir=kwargs.get("cache_dir"))
     return fetch_history(code, kind=KIND_INDEX, **kwargs)
 
 

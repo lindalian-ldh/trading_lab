@@ -123,8 +123,9 @@ def test_build_index_from_prices_matches_manual_returns():
           "sz000001": _px([10, 9, 9], DATES[:3])}
     c = _cons(("600000", "2019-01-01"), ("000001", "2019-01-01"))
     out = si.build_index_from_prices(px, c, start="2019-01-01", min_members=2)
-    # 由价格合成时第一根没有收益（被丢掉）⇒ 只有第 2、3 根：+10%/−10% → 0；再 0
-    assert out["ret"].tolist() == pytest.approx([0.0, 0.0])
+    # 第一根没有"前收" ⇒ 无成分股可用、close 为 NaN；之后两根：+10%/−10% → 0；再 0
+    assert np.isnan(out["close"].iloc[0]) and out["n_members"].iloc[0] == 0
+    assert out["ret"].tolist()[1:] == pytest.approx([0.0, 0.0])
 
 
 def test_correlation_perfect_and_none():
@@ -146,3 +147,57 @@ def test_correlation_uses_overlapping_dates_only():
     b = pd.DataFrame({"date": d[100:], "close": np.linspace(500, 600, len(d) - 100)})
     v, n = si.correlation(a, b)
     assert n == len(d) - 100 - 1
+
+
+# ====================================================================
+# OHLC 合成（L1 的摆动点要用 high/low，不能拿 close 假装）
+# ====================================================================
+
+def _ohlc(dates, o, h, l, c) -> pd.DataFrame:
+    return pd.DataFrame({"date": pd.DatetimeIndex(pd.to_datetime(dates)),
+                         "open": o, "high": h, "low": l, "close": c})
+
+
+def test_ohlc_synthesis_close_matches_plain_synthesis():
+    """OHLC 口径下的 close 必须与只算收益的口径**完全一致**。"""
+    dates = DATES[:4]
+    f1 = _ohlc(dates, [10, 11, 12, 13], [10.5, 11.5, 12.5, 13.5],
+               [9.5, 10.5, 11.5, 12.5], [10, 11, 12, 13])
+    f2 = _ohlc(dates, [20, 20, 22, 22], [21, 21, 23, 23],
+               [19, 19, 21, 21], [20, 20, 22, 22])
+    c = _cons(("600000", "2019-01-01"), ("000001", "2019-01-01"))
+    a = si.build_index_from_ohlc({"sh600000": f1, "sz000001": f2}, c,
+                                 start="2019-01-01", min_members=2)
+    b = si.build_index_from_prices(
+        {"sh600000": f1.set_index("date")["close"], "sz000001": f2.set_index("date")["close"]},
+        c, start="2019-01-01", min_members=2)
+    assert len(a) == len(b)
+    assert a["close"].to_numpy()[1:] == pytest.approx(b["close"].to_numpy()[1:])
+
+
+def test_ohlc_high_low_bracket_close_and_use_field_ratios():
+    dates = DATES[:3]
+    f1 = _ohlc(dates, [10, 11, 11], [11, 12, 13], [9, 10, 9], [10, 11, 12])
+    f2 = _ohlc(dates, [10, 10, 10], [10, 10, 10], [10, 10, 10], [10, 10, 10])
+    c = _cons(("600000", "2019-01-01"), ("000001", "2019-01-01"))
+    out = si.build_index_from_ohlc({"sh600000": f1, "sz000001": f2}, c,
+                                   start="2019-01-01", min_members=2)
+    # 第一根用收盘兜底；之后 high ≥ close ≥ low 必须成立
+    for _, r in out.iloc[1:].iterrows():
+        assert r["high"] >= r["close"] >= r["low"]
+        assert r["high"] >= r["open"] >= r["low"]
+
+
+def test_ohlc_requires_previous_close_so_first_bar_has_no_members():
+    """没有前收 ⇒ 当日不可用（第一根只能靠兜底，之后才正常）。"""
+    dates = DATES[:3]
+    f1 = _ohlc(dates, [10, 11, 12], [10, 11, 12], [10, 11, 12], [10, 11, 12])
+    c = _cons(("600000", "2019-01-01"))
+    out = si.build_index_from_ohlc({"sh600000": f1}, c, start="2019-01-01", min_members=1)
+    assert out["n_members"].tolist() == [0, 1, 1]
+    assert np.isnan(out["close"].iloc[0]) and np.isfinite(out["close"].iloc[1])
+
+
+def test_ohlc_empty_inputs():
+    out = si.build_index_from_ohlc({}, _cons())
+    assert out.empty and "high" in out.columns

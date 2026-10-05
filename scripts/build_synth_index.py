@@ -56,15 +56,14 @@ SYNTH_DIR = ROOT / "data" / "synth"
 # ====================================================================
 
 def load_prices_tencent(codes, *, online: bool, throttle: float = 0.0) -> dict:
-    """腾讯源前复权个股价（已按代码阈值修复企业行为）。"""
+    """腾讯源前复权个股 **OHLC 帧**（已按代码阈值修复企业行为）。"""
     out, fail = {}, []
     for i, tx in enumerate(codes, 1):
         d = fetch_equity_history(tx, refresh=online, prefer_cache=not online)
         if d is None or d.empty:
             fail.append(tx)
             continue
-        s = d.set_index("date")["close"].astype(float)
-        out[tx] = s[~s.index.duplicated(keep="last")]
+        out[tx] = d[["date", "open", "high", "low", "close"]].copy()
         if throttle and i % 20 == 0:
             time.sleep(throttle)
     if fail:
@@ -84,7 +83,8 @@ def load_prices_baostock(codes) -> dict:
         for tx in codes:
             sym = f"{tx[:2]}.{tx[2:]}"
             rs = bs.query_history_k_data_plus(
-                sym, "date,close", start_date="2005-01-01", end_date="2099-12-31",
+                sym, "date,open,high,low,close",
+                start_date="2005-01-01", end_date="2099-12-31",
                 frequency="d", adjustflag="2")      # 2 = 前复权
             rows = []
             while rs.error_code == "0" and rs.next():
@@ -92,11 +92,12 @@ def load_prices_baostock(codes) -> dict:
             if not rows:
                 fail.append(tx)
                 continue
-            d = pd.DataFrame(rows, columns=["date", "close"])
+            d = pd.DataFrame(rows, columns=["date", "open", "high", "low", "close"])
             d["date"] = pd.to_datetime(d["date"])
-            d["close"] = pd.to_numeric(d["close"], errors="coerce")
-            s = d.dropna().set_index("date")["close"]
-            out[tx] = s
+            for c in ("open", "high", "low", "close"):
+                d[c] = pd.to_numeric(d[c], errors="coerce")
+            d["open"] = d["close"]; d["high"] = d["close"]; d["low"] = d["close"]
+            out[tx] = d[["date", "open", "high", "low", "close"]]
     finally:
         bs.logout()
     if fail:
@@ -151,6 +152,10 @@ def main() -> int:
     ap.add_argument("--source", choices=["tencent", "baostock"], default="tencent")
     ap.add_argument("--start", default=SI.SYNTH_START, help=f"起算日（默认 {SI.SYNTH_START}）")
     ap.add_argument("--min-members", type=int, default=SI.MIN_MEMBERS)
+    ap.add_argument("--ignore-time-in", action="store_true",
+                    help="忽略 time_in，按**上市日起算**（= 假设这些公司一直是成分股）。"
+                         "适用情形：`time_in` 被单一『批量分类日期』主导时"
+                         "（如稀土永磁 13 只都是 2018-09-20），此时 time_in 不是真实成分变动")
     ap.add_argument("--validate", default="", help="用于验证的 ETF，逗号分隔")
     ap.add_argument("--rank", action="store_true", help="输出成分股复核清单（诊断用）")
     ap.add_argument("--ref-etf", default="", help="--rank 的参照 ETF")
@@ -173,6 +178,13 @@ def main() -> int:
     codes = [k[0] for k in kept]
     print(f"  可用代码 {len(codes)} 个，取数来源 {args.source} …")
 
+    if args.ignore_time_in:
+        n_before = members["time_in"].nunique()
+        members = members.copy()
+        members["time_in"] = args.start
+        print(f"  ⚠️ --ignore-time-in：把 {len(members)} 只的 time_in 一律设为 {args.start}"
+              f"（原 time_in 有 {n_before} 个不同取值）")
+
     prices = (load_prices_baostock(codes) if args.source == "baostock"
               else load_prices_tencent(codes, online=args.online))
     if not prices:
@@ -189,9 +201,10 @@ def main() -> int:
                       else fetch_equity_history(ref, refresh=args.online))
         rows = []
         for tx, raw in kept:          # to_tx_codes 返回 (tx_code, raw_code)
-            s = prices.get(tx)
-            if s is None:
+            fr = prices.get(tx)
+            if fr is None or len(fr) == 0:
                 continue
+            s = pd.Series(fr["close"].to_numpy(), index=pd.DatetimeIndex(fr["date"]))
             px = pd.DataFrame({"date": s.index, "close": s.to_numpy()})
             v, n = (SI.correlation(px, ref_df) if ref_df is not None else (None, 0))
             rows.append({"代码": tx, "名称": name_of.get(raw, "")[:10],
@@ -210,11 +223,10 @@ def main() -> int:
         return 0
 
     # —— ② 合成 + 验证 ——
-    synth = SI.build_index_from_prices(prices, members.drop(columns=["plate_type",
-                                                                    "plate_code",
-                                                                    "plate_name"],
-                                                            errors="ignore"),
-                                       start=args.start, min_members=args.min_members)
+    synth = SI.build_index_from_ohlc(
+        prices,
+        members.drop(columns=["plate_type", "plate_code", "plate_name"], errors="ignore"),
+        start=args.start, min_members=args.min_members)
     if synth.empty:
         print("❌ 合成结果为空（检查 time_in 与价格区间）")
         return 1
