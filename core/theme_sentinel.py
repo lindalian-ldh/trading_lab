@@ -28,7 +28,13 @@ from typing import Callable, Optional
 import numpy as np
 import pandas as pd
 
-from core.theme_timing import EPISODE_GAP, episode_spans, l1_pending, layer_masks
+from core.theme_timing import (
+    EPISODE_GAP,
+    episode_spans,
+    l1_pending,
+    layer_masks,
+    rs_strength,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +53,18 @@ MIN_BARS = 60
 SHORT_HISTORY_BARS = 2430
 #: 主题与锚的日收益相关性超过此值 ⇒ **RS 层近乎退化**（比价近乎常数）
 RS_WEAK_CORR = 0.85
+#: **大盘锚**：用于第二列相对强度（``RS大盘``）。
+# 为什么要有第二列：主题自己的锚（``THEMES[*]['anchor']``）是**冻结项**（P0.5 §G1），
+# 它回答"同风格内部强不强"；但它可能是创业板指/科创50 这种**与主题近乎同一个东西**的锚
+# （实测相关系数 0.85~0.90 ⇒ 比价近乎常数、RS 退化，显示 ⚠️）。
+# 换掉它要改冻结项；而**加一列显示**不用 —— 所以第二列固定用沪深300，回答"相对大盘强不强"。
+# 两者组合起来才有信息量：
+#   风格✓大盘✓ = 最强；风格✓大盘✗ = 行业 alpha 在、风格 beta 逆风；
+#   风格✗大盘✓ = 搭了风格的车、自身不强；风格✗大盘✗ = 最弱。
+# ⚠️ 本列**只用于显示与台账**，不进 P2.2/P2.3 的冻结组合（L1 / L1+L2 / L1+L2+RS），
+#    也不参与任何通过/不通过判定 —— 否则就是看到数据后加新假设。
+MARKET_ANCHOR = "sh000300"
+
 #: 「结构已破」标签只在最近这么多**交易日**内曾点亮过 L1 时才用
 #  （否则几乎所有序列都满足"历史上曾转多" ⇒ 标签退化成常量、毫无信息）
 RECENT_SPAN_DAYS = 20
@@ -89,7 +107,8 @@ def _last_span(mask: pd.Series):
 def theme_status(theme: dict,
                  index_df: Optional[pd.DataFrame],
                  anchor_df: Optional[pd.DataFrame],
-                 as_of=None) -> dict:
+                 as_of=None,
+                 market_df: Optional[pd.DataFrame] = None) -> dict:
     """单个主题的观察哨读数（**pure**；不取数、不落盘）。
 
     Args:
@@ -109,6 +128,8 @@ def theme_status(theme: dict,
         "l1": False, "l2": False, "rs": False, "rs_available": idx_code != anchor_code,
         "l1_state_days": 0, "l1_span_start": None, "l1_span_end": None,
         "l1_span_end_days_ago": None, "l1_pending": False,
+        "rs_market": False, "rs_market_weak": False,
+        "rs_market_same_as_anchor": False, "corr_with_market": None,
         "l2_recent_days_ago": None, "close": None,
     }
 
@@ -177,7 +198,31 @@ def theme_status(theme: dict,
         rec["l2_recent_days_ago"] = int(len(d) - 1 - l2_pos[-1])
 
     # —— 只显示的状态标签（优先级从高到低）——
-    rs_txt = "（RS 亦走强）" if (rec["rs"] and rec["rs_available"]) else ""
+    # —— 第二列：相对**大盘**（沪深300）的强弱。纯显示，不进任何判定 ——
+    if rec["rs_available"]:
+        if rec["anchor"] == MARKET_ANCHOR:
+            rec["rs_market_same_as_anchor"] = True
+            rec["rs_market"] = rec["rs"]
+            rec["rs_market_weak"] = rec["rs_weak"]
+        elif market_df is not None and len(market_df) > 0:
+            try:
+                rec["rs_market"] = bool(rs_strength(d_ohlc, market_df).iloc[-1])
+            except Exception as e:
+                logger.warning("RS大盘 计算失败 %s: %s: %s", name, type(e).__name__, e)
+            vm = _corr_with_anchor(d_ohlc, market_df)
+            rec["corr_with_market"] = None if vm is None else round(vm, 3)
+            rec["rs_market_weak"] = bool(vm is not None and vm > RS_WEAK_CORR)
+
+    if not rec["rs_available"]:
+        rs_txt = ""
+    elif rec["rs"] and rec["rs_market"]:
+        rs_txt = "（风格+大盘双强）"
+    elif rec["rs"] and not rec["rs_market"]:
+        rs_txt = "（风格强，大盘弱）"
+    elif rec["rs_market"] and not rec["rs"]:
+        rs_txt = "（风格弱，大盘强）"
+    else:
+        rs_txt = ""
     if rec["l1"] and rec["l2"]:
         rec["status"] = "🔵🔵 结构+均线双确认（观察）" + rs_txt
     elif rec["l1"] and rec["rs"]:
@@ -229,10 +274,11 @@ def build_sentinel(themes, loader: Callable[[str], Optional[pd.DataFrame]],
                 cache[code] = None
         return cache[code]
 
+    market_df = _load(MARKET_ANCHOR)
     rows = []
     for t in themes:
         rows.append(theme_status(t, _load(t.get("index")), _load(t.get("anchor")),
-                                 as_of=as_of))
+                                 as_of=as_of, market_df=market_df))
     return rows
 
 
@@ -245,38 +291,47 @@ def format_sentinel(rows: list, as_of=None) -> str:
                  f"观察项 {len(rows)} 个（主题 {n_th} + 观察项 {len(rows) - n_th}）")
     lines.append("=" * 104)
     lines.append(f"  {VALIDATION_NOTE}")
-    lines.append("  RS 列：✅=比价走强  ·=未走强  N/A=index 与 anchor 同一个（比价恒为 1）  "
-                 f"⚠️=主题与锚相关 >{RS_WEAK_CORR}（比价近乎常数，**该层不可信**）")
+    lines.append("  相对强度两列：**风格** = 主题÷自己的锚（冻结项 §G1，回答『同风格内部强不强』）；"
+                 f"**大盘** = 主题÷{MARKET_ANCHOR} 沪深300（回答『相对大盘强不强』）")
+    lines.append("    符号 ✅=比价走强  ·=未走强  N/A=index 与锚同一个（比价恒为 1）  "
+                 f"＝=该主题的锚本来就是沪深300（两列相同）  "
+                 f"⚠️=主题与锚相关 >{RS_WEAK_CORR}（比价近乎常数，**该列不可信**）")
+    lines.append("    ⚠️ 两条一起看才有信息量：风格✓大盘✗ = 行业 alpha 在、风格 beta 逆风；"
+                 "风格✗大盘✓ = 搭了风格的车、自身不强。**两列都只显示、不决策**")
     lines.append(f"  {DISCIPLINE_NOTE}")
     lines.append("  " + arbitration_note())
     def _name(r) -> str:
         lab = r["theme"] + (f"(代理:{r['proxy_of']})" if r.get("proxy_of") else "")
         return f"{lab:<15}"
 
+    def _rs_cell(lit: bool, weak: bool, na: bool = False, same: bool = False) -> str:
+        if na:
+            return "N/A"
+        if same:
+            return "＝"
+        if weak:
+            return "⚠️✅" if lit else "⚠️·"
+        return "✅" if lit else "·"
+
     def _row(r) -> str:
         if not r["available"]:
             return (f"  {_name(r)}{str(r['index']):<15}{str(r['anchor']):<9}"
                     f"{r['bars']:>6}  {(r['last_bar'] or '-'):<12}"
-                    f"{'?':>4}{'?':>4}{'?':>4}  {r['status']}")
-        # RS 列：退化时**同时**显示退化告警与点亮状态（⚠️✅ / ⚠️·），
-        # 否则"⚠️"会把"到底亮没亮"盖住（2026-10-05 用户提问暴露的歧义）
-        if not r["rs_available"]:
-            rs = "N/A"
-        elif r["rs_weak"]:
-            rs = "⚠️✅" if r["rs"] else "⚠️·"
-        else:
-            rs = "✅" if r["rs"] else "·"
+                    f"{'?':>4}{'?':>4}{'?':>4}{'?':>4}  {r['status']}")
+        rs = _rs_cell(r["rs"], r["rs_weak"], na=not r["rs_available"])
+        rsm = _rs_cell(r["rs_market"], r["rs_market_weak"],
+                       same=r["rs_market_same_as_anchor"])
         return (f"  {_name(r)}{str(r['index']):<15}{str(r['anchor']):<9}"
                 f"{r['bars']:>6}  {r['last_bar']:<12}"
-                f"{'🔵' if r['l1'] else '·':>4}{'⚡' if r['l2'] else '·':>4}{rs:>4}"
+                f"{'🔵' if r['l1'] else '·':>4}{'⚡' if r['l2'] else '·':>4}{rs:>4}{rsm:>4}"
                 f"  {r['status']}")
 
     def _head(title: str) -> None:
         lines.append("")
         lines.append(f"  {title}")
         lines.append(f"  {'主题':<15}{'指数':<15}{'锚':<9}{'根数':>6}  {'最后交易日':<12}"
-                     f"{'L1':>4}{'L2':>4}{'RS':>4}  状态")
-        lines.append("  " + "-" * 106)
+                     f"{'L1':>4}{'L2':>4}{'风格':>4}{'大盘':>4}  状态")
+        lines.append("  " + "-" * 112)
 
     themes = [r for r in rows if r.get("kind", "theme") == "theme"]
     watch = [r for r in rows if r.get("kind", "theme") == "watch"]
@@ -298,10 +353,12 @@ def format_sentinel(rows: list, as_of=None) -> str:
     hist_short = [r for r in rows if r["available"] and MIN_BARS <= r["bars"] < SHORT_HISTORY_BARS]
     degenerate = [r for r in rows if r["available"] and not r["rs_available"]]
     weak = [r for r in rows if r["available"] and r["rs_weak"]]
+    weak_m = [r for r in rows if r["available"] and r["rs_market_weak"]]
     lines.append(f"  · 可用 {len(rows) - len(bad)}/{len(rows)}   不可用 {len(bad)}   "
                  f"过期 {len(stale)}   预热不足 {len(short)}   "
                  f"历史<10年 {len(hist_short)}   "
-                 f"RS 不可用 {len(degenerate)}   RS 退化 {len(weak)}")
+                 f"RS 不可用 {len(degenerate)}   RS(风格)退化 {len(weak)}   "
+                 f"RS(大盘)退化 {len(weak_m)}")
     for r in bad:
         lines.append(f"  ❌ {r['theme']}: {r['status']}")
     for r in degenerate:
@@ -310,7 +367,10 @@ def format_sentinel(rows: list, as_of=None) -> str:
         lines.append(f"  ⚠️ {r['theme']}: 历史 {r['bars']} 根 < {SHORT_HISTORY_BARS}（≈10 年）"
                      f"⇒ **只观察、不作验证依据**")
     for r in weak:
-        lines.append(f"  ⚠️ {r['theme']}: RS 层退化（与锚相关 {r['corr_with_anchor']}）")
+        lines.append(f"  ⚠️ {r['theme']}: RS(风格) 退化（与该主题的锚相关 {r['corr_with_anchor']}）")
+    for r in weak_m:
+        lines.append(f"  ⚠️ {r['theme']}: RS(大盘) 退化（与 {MARKET_ANCHOR} 相关 "
+                     f"{r['corr_with_market']}）")
     for r in short:
         lines.append(f"  ⚠️ {r['theme']}: {'；'.join(r['warnings'])}")
 
@@ -330,13 +390,18 @@ def format_sentinel(rows: list, as_of=None) -> str:
     lines.append("")
     lines.append(f"  {DISCIPLINE_NOTE}")
     lines.append(f"  {VALIDATION_NOTE}")
-    lines.append("  RS 列：✅=比价走强  ·=未走强  N/A=index 与 anchor 同一个（比价恒为 1）  "
-                 f"⚠️=主题与锚相关 >{RS_WEAK_CORR}（比价近乎常数，**该层不可信**）")
+    lines.append("  相对强度两列：**风格** = 主题÷自己的锚（冻结项 §G1，回答『同风格内部强不强』）；"
+                 f"**大盘** = 主题÷{MARKET_ANCHOR} 沪深300（回答『相对大盘强不强』）")
+    lines.append("    符号 ✅=比价走强  ·=未走强  N/A=index 与锚同一个（比价恒为 1）  "
+                 f"＝=该主题的锚本来就是沪深300（两列相同）  "
+                 f"⚠️=主题与锚相关 >{RS_WEAK_CORR}（比价近乎常数，**该列不可信**）")
+    lines.append("    ⚠️ 两条一起看才有信息量：风格✓大盘✗ = 行业 alpha 在、风格 beta 逆风；"
+                 "风格✗大盘✓ = 搭了风格的车、自身不强。**两列都只显示、不决策**")
     return "\n".join(lines)
 
 
 __all__ = [
     "DISCIPLINE_NOTE", "VALIDATION_NOTE", "STALE_DAYS", "MIN_BARS",
-    "SHORT_HISTORY_BARS", "RS_WEAK_CORR", "RECENT_SPAN_DAYS",
+    "SHORT_HISTORY_BARS", "RS_WEAK_CORR", "RECENT_SPAN_DAYS", "MARKET_ANCHOR",
     "arbitration_note", "theme_status", "build_sentinel", "format_sentinel",
 ]

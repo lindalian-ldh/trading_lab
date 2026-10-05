@@ -53,7 +53,11 @@ SIGNAL_FAMILY = "theme_timing"
 
 COLUMNS = [
     "date", "theme", "index", "anchor", "close", "bars", "last_bar", "staleness_days",
-    "l1", "l2", "rs", "rs_available", "l1_state_days", "l1_span_start", "l1_span_end",
+    "l1", "l2", "rs", "rs_available",
+    # —— 第二列相对强度（相对大盘沪深300）：**纯显示**，不进任何判定 ——
+    "rs_market", "rs_market_weak", "rs_market_same_as_anchor", "corr_with_market",
+    "corr_with_anchor", "l1_state_days", "l1_span_start", "l1_span_end",
+    "l1_pending", "l1_span_end_days_ago",
     "signal_name", "status", "signal_family", "validated", "available", "note", "logged_at",
 ]
 
@@ -67,7 +71,10 @@ def _loader(online: bool):
 
 
 def _signal_name(r: dict) -> str:
-    lit = [k.upper() if k in ("l1", "l2", "rs") else k for k in ("l1", "l2", "rs") if r.get(k)]
+    """当天点亮了哪几层；第二列（大盘）单独用 ``RS_大盘`` 标出，避免与冻结的 RS 混淆。"""
+    lit = [k.upper() for k in ("l1", "l2", "rs") if r.get(k)]
+    if r.get("rs_market"):
+        lit.append("RS_大盘")
     return "+".join(lit) if lit else "-"
 
 
@@ -79,7 +86,12 @@ def _to_rows(rows: list) -> pd.DataFrame:
             "anchor": r["anchor"], "close": r["close"], "bars": r["bars"],
             "last_bar": r["last_bar"], "staleness_days": r["staleness_days"],
             "l1": r["l1"], "l2": r["l2"], "rs": r["rs"],
-            "rs_available": r["rs_available"], "l1_state_days": r["l1_state_days"],
+            "rs_available": r["rs_available"],
+            "rs_market": r["rs_market"], "rs_market_weak": r["rs_market_weak"],
+            "rs_market_same_as_anchor": r["rs_market_same_as_anchor"],
+            "corr_with_market": r["corr_with_market"], "corr_with_anchor": r["corr_with_anchor"],
+            "l1_pending": r["l1_pending"], "l1_span_end_days_ago": r["l1_span_end_days_ago"],
+            "l1_state_days": r["l1_state_days"],
             "l1_span_start": r["l1_span_start"], "l1_span_end": r["l1_span_end"],
             "signal_name": _signal_name(r), "status": r["status"],
             "signal_family": SIGNAL_FAMILY, "validated": False,

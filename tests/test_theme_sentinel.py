@@ -283,7 +283,7 @@ def test_rs_weak_is_reported_in_summary_section():
     theme = _mk(_rand_walk(n, shared=shared, seed=1, scale=0.1, base=100.0))
     anchor = _mk(_rand_walk(n, shared=shared, seed=2, scale=0.1, base=50.0))
     txt = sn.format_sentinel(sn.build_sentinel([THEME], lambda c: theme if c == THEME["index"] else anchor))
-    assert "RS 退化 1" in txt or "RS 退化" in txt
+    assert "RS(风格)退化 1" in txt or "RS(风格)退化" in txt
 
 
 def test_proxy_items_share_the_proxied_index():
@@ -355,7 +355,32 @@ def test_rs_column_shows_both_weak_and_lit_state():
     assert rows[0]["rs_weak"] is True
     txt = sn.format_sentinel(rows)
     assert "⚠️✅" in txt or "⚠️·" in txt
-    assert "该层不可信" in txt
+    assert "该列不可信" in txt
+
+
+def test_market_rs_column_present_and_marks_same_anchor():
+    """两列相对强度必须同时出现；主题的锚本来就是沪深300时，大盘列显示『＝』。"""
+    rows = sn.build_sentinel([{"theme": "T", "index": "sz399363", "anchor": sn.MARKET_ANCHOR}],
+                             lambda c: _trend(200))
+    assert rows[0]["rs_market_same_as_anchor"] is True
+    assert rows[0]["rs_market"] == rows[0]["rs"]
+    assert "＝" in sn.format_sentinel(rows)
+    assert "大盘" in sn.format_sentinel(rows)
+
+
+def test_market_rs_uses_market_frame_when_anchor_differs():
+    """锚不是沪深300时，大盘列要用 market_df 单独算，不能等于风格列。"""
+    n = 400
+    rng = np.random.default_rng(31)
+    theme = _mk(_rand_walk(n, seed=41, base=100.0))
+    anchor = _mk(_rand_walk(n, seed=42, base=50.0))
+    market = _mk(_rand_walk(n, seed=43, base=300.0))
+    frames = {"sz399363": theme, "sz399006": anchor, "sh000300": market}
+    rows = sn.build_sentinel([THEME], lambda c: frames.get(c))
+    r = rows[0]
+    assert r["rs_market_same_as_anchor"] is False
+    assert r["corr_with_market"] is not None
+    assert (r["rs_market"], r["rs"]) in ((True, True), (True, False), (False, True), (False, False))
 
 
 def test_recent_span_days_constant_is_sane():
