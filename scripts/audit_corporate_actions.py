@@ -50,6 +50,9 @@ if str(ROOT) not in sys.path:
 
 from core.marketdata_tx import (  # noqa: E402
     CORPORATE_ACTION_THRESHOLD,
+    LIMIT_BUFFER,
+    MIN_BARS_FOR_LISTING_SKIP,
+    NEW_LISTING_BARS,
     cache_path,
     fetch_equity_history,
     load_cache,
@@ -185,7 +188,9 @@ def main() -> int:
     else:
         print("=" * 96)
         print(f"企业行为审计门禁 —— 模式: {'联网' if args.online else '离线(只读缓存)'}   "
-              f"阈值: 单日 |收益| > {CORPORATE_ACTION_THRESHOLD*100:.0f}%   标的数: {len(rows)}")
+              f"阈值: **按代码推定的涨跌幅上限 + {LIMIT_BUFFER*100:.0f}pp**"
+              f"（主板 11% / 双创与 ETF 21% / 北交所 31%；前 {NEW_LISTING_BARS} 根豁免）"
+              f"   标的数: {len(rows)}")
         print("=" * 96)
         print(f"  {'代码':<10} {'名称':<18} {'根数':>6} {'原始最大':>9} {'复权后':>8} "
               f"{'97后最大':>9} {'法定':>6}  状态")
@@ -214,13 +219,18 @@ def main() -> int:
         print(f"  ✅ 无断崖: {sum(1 for r in rows if not r['events'] and r['ok'])}   "
               f"🔧 已修复: {len(fixed)}   ⚠️ 残余可疑: {len(susp)}   ❌ 失败: {len(bad)}")
         print("\n  ⚠️ 已知局限（**不掩盖**）：")
-        print("     · 自动复权阈值 22% 是『高出 A 股单日涨跌幅上限 20%』的机械判据，")
-        print("       因此**小于 22% 的送转/折算识别不出来**（实例：sz002371 在 2011-07-01")
-        print("       原始 69.01 → 53.86 = −21.95%，实为 10 转 3 型的除权，未被自动修复）。")
-        print("     · 影响面：**ETF 全部通过**（Phase 2 的信号用指数、执行用 ETF，不受影响）；")
-        print("       个股仅在 P0.4c「合成主题指数」时才用到 ⇒ **该步必须改用带复权的数据源**")
-        print("       （baostock 支持 adjustflag，腾讯源不支持）或逐个标的核对除权记录。")
+        print(f"     · 阈值现在是**按代码推定**的法定涨跌幅上限 + {LIMIT_BUFFER*100:.0f}pp"
+              f"（主板 11% / 双创与 ETF 21% / 北交所 31%），")
+        print("       已能抓到过去漏掉的 10 转 3 型除权（实例：sz002371 在 2011-07-01 的 −21.95%）。")
+        print("     · **ETF 一律按 20%（最宽口径）**：ETF 的上限取决于跟踪指数，仅凭代码判不了，")
+        print("       故取最宽 ⇒ 主板 ETF 在 10%~21% 区间的折算/分红会被**漏报**（安全方向）。")
+        print("       实测 11 只 ETF 的份额折算都在 45% 以上，未受影响。")
+        print("     · **ST 股（±5%）按 10% 处理** ⇒ 只会漏报 5%~11% 的送转，**不会误报**（安全方向）。")
+        print(f"     · **前 {NEW_LISTING_BARS} 根豁免**：新股上市初期无涨跌幅限制；"
+              f"只在序列 ≥{MIN_BARS_FOR_LISTING_SKIP} 根时生效。")
         print("     · 1997 年前无涨跌幅限制，超限变动可能是真实行情，故残余检验从 1997 起算。")
+        print("     · **北交所（920xxx / 4xxxxx / 8xxxxx）腾讯源取不到**，已在 normalize_tx_code")
+        print("       显式拒绝（绝不静默猜成 sh/sz 取错标的）。")
 
     bad = [r for r in rows if not r["ok"]]
     if bad:

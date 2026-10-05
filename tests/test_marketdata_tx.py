@@ -435,3 +435,79 @@ def test_fetch_equity_bars_slice_happens_after_adjustment(cache_dir, monkeypatch
     assert len(out) == 2
     assert out["adj_factor"].tolist() == [1.0, 1.0]
     assert out["close"].tolist() == pytest.approx([1.08, 1.06])
+
+
+# ====================================================================
+# 按代码推定的涨跌幅上限（2026-10-05：把固定 22% 改成按代码推定）
+# ====================================================================
+
+@pytest.mark.parametrize("code,limit", [
+    ("sh600111", 0.10), ("sh900901", 0.10),          # 沪主板 / 沪B
+    ("sh688077", 0.20), ("sh512480", 0.20),          # 科创板 / 沪市基金
+    ("sz000831", 0.10), ("sz002371", 0.10),          # 深主板
+    ("sz300748", 0.20), ("sz159715", 0.20),          # 创业板 / 深市基金
+])
+def test_price_limit_by_code(code, limit):
+    assert m.price_limit(code) == limit
+
+
+def test_price_limit_unknown_code_falls_back_to_conservative():
+    assert m.price_limit("垃圾代码") == m.CORPORATE_ACTION_THRESHOLD
+
+
+def test_bse_codes_are_rejected_not_silently_mapped():
+    """北交所标的必须**显式拒绝** —— 静默猜成 sh/sz 会取错标的。"""
+    for code in ("920061", "920061", "430047", "830799"):
+        with pytest.raises(m.MarketDataError, match="北交所"):
+            m.normalize_tx_code(code, "equity")
+
+
+def test_code_aware_threshold_catches_small_split_that_22pct_missed():
+    """主板 10 转 3 型除权约 −22%（**旧阈值 22% 抓不到**）⇒ 新阈值必须抓到。"""
+    raw = m._reindex_columns(_mk(
+        ["2011-06-29", "2011-06-30", "2011-07-01", "2011-07-04"],
+        [66.81, 69.01, 53.86, 56.50]))          # 69.01 → 53.86 = −21.95%
+    assert m.detect_corporate_actions(raw).empty              # 旧口径（22%）漏掉
+    ev = m.detect_corporate_actions(raw, tx_code="sz002371")   # 新口径（11%）
+    assert len(ev) == 1
+    assert ev.iloc[0]["ret"] == pytest.approx(-0.2195, abs=1e-3)
+
+
+def test_code_aware_threshold_never_flags_legal_double_creation_move():
+    """创业板 ±20% 是合法波动 ⇒ 阈值 21% 不得把它当企业行为。"""
+    raw = m._reindex_columns(_mk(
+        ["2026-01-05", "2026-01-06", "2026-01-07"], [10.0, 12.0, 9.6]))
+    assert m.detect_corporate_actions(raw, tx_code="sz300748").empty
+    # 同一序列按主板 11% 处理就会误报 —— 这正是"按代码推定"要避免的
+    assert len(m.detect_corporate_actions(raw, tx_code="sz000831")) == 2
+
+
+def test_detect_skips_new_listing_bars_on_long_series():
+    """新股上市初期无涨跌幅限制 ⇒ 前 N 根不检测（否则首日暴涨会被当成企业行为）。
+
+    豁免只在**长序列**（≥ ``MIN_BARS_FOR_LISTING_SKIP``）上生效 —— 短序列套用它会把整段豁免掉。
+    """
+    n = 300
+    closes = [10.0, 14.4] + [14.4 + 0.05 * i for i in range(n - 2)]   # 第 2 根 +44%（新股）
+    raw = _mk(list(pd.bdate_range("2024-01-01", periods=n)), closes)
+    assert m.detect_corporate_actions(raw, tx_code="sz000831").empty       # 被豁免
+    assert len(m.detect_corporate_actions(raw, tx_code="sz000831",
+                                          skip_first_bars=0)) == 1
+
+
+def test_listing_skip_does_not_apply_to_short_series():
+    """短序列（<250 根）不得启用豁免，否则整段序列都被跳过（既有单测踩过）。"""
+    raw = m._reindex_columns(_mk(
+        ["2011-06-29", "2011-06-30", "2011-07-01", "2011-07-04"],
+        [66.81, 69.01, 53.86, 56.50]))
+    assert len(m.detect_corporate_actions(raw, tx_code="sz002371")) == 1
+    assert len(raw) < m.MIN_BARS_FOR_LISTING_SKIP
+
+
+def test_adjust_propagates_tx_code_to_detection():
+    raw = m._reindex_columns(_mk(
+        ["2011-06-29", "2011-06-30", "2011-07-01", "2011-07-04"],
+        [66.81, 69.01, 53.86, 56.50]))
+    adj, ev = m.adjust_corporate_actions(raw, tx_code="sz002371")
+    assert len(ev) == 1
+    assert float(adj["close"].pct_change().abs().max()) < 0.11

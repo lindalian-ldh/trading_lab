@@ -146,6 +146,12 @@ def normalize_tx_code(code: str, kind: Optional[str] = None) -> str:
         if not num.isdigit():
             raise MarketDataError(f"无法识别的代码格式: {code!r}")
         if kind == KIND_EQUITY:
+            # ⚠️ 北交所（920xxx / 4xxxxx / 8xxxxx）腾讯源**取不到**（实测三种前缀全部报错）。
+            # 绝不把它猜成 sh/sz —— 那会静默取错标的（本仓库在 000688 上踩过同类坑）。
+            if num.startswith(("920", "92")) or num[0] in ("4", "8"):
+                raise MarketDataError(
+                    f"北交所标的 {code!r} 暂不支持：腾讯源对 920xxx/4xxxxx/8xxxxx 取不到数据"
+                    f"（实测 bj/sz/sh 三种前缀均失败）。请从清单中排除。")
             market = "sh" if num[0] in ("5", "6", "9") else "sz"
         else:
             raise MarketDataError(
@@ -280,15 +286,77 @@ def merge_history(cached: Optional[pd.DataFrame],
 # （部分跨境 ETF / 退市整理股），故检测结果**必须显式打印供人工复核**，不许静默处理。
 CORPORATE_ACTION_THRESHOLD = 0.22
 
+#: 阈值 = 法定涨跌幅上限 + 这个缓冲（1 个百分点）
+LIMIT_BUFFER = 0.01
+
+#: 上市初期豁免：前 N 根不做企业行为检测
+#  新股上市首日/前几日**没有涨跌幅限制**（旧规主板首日 ±44%、注册制前 5 日不设限），
+#  用低阈值去检测会把新股首日当成"企业行为"。
+NEW_LISTING_BARS = 10
+#: 只有当序列**至少这么长**时才启用上市初期豁免。
+#  理由：短序列（<1 年）几乎不可能是"某只正常股票从上市到今天的完整历史"，
+#  对它套用豁免会把整段序列都豁免掉（既有单测就踩到了这个）。生产路径取的是
+#  全历史（多数 10~30 年），所以豁免正常生效。
+MIN_BARS_FOR_LISTING_SKIP = 250
+
 CA_COLUMNS: tuple = ("date", "prev_date", "prev_close", "close", "factor", "ret")
+
+
+def price_limit(tx_code: str) -> float:
+    """按代码推定**法定单日涨跌幅上限**（用于企业行为检测阈值）。
+
+    | 类型 | 代码 | 上限 |
+    |---|---|---|
+    | 沪市主板 | ``sh60xxxx`` / ``sh9xxxxx`` | 10% |
+    | 科创板 | ``sh688xxx`` | 20% |
+    | 沪市基金 | ``sh5xxxxx`` | 20%（**取最宽口径**，见下） |
+    | 深市主板 | ``sz00xxxx``（000/001/002/003） | 10% |
+    | 创业板 | ``sz30xxxx`` | 20% |
+    | 深市基金 | ``sz15xxxx`` / ``16xxxx`` / ``18xxxx`` | 20%（**取最宽口径**） |
+    | 北交所 | ``4xxxxx`` / ``8xxxxx`` / ``920xxx`` | 30% |
+
+    ⚠️ **ETF 一律取 20%**：ETF 的涨跌幅上限取决于其跟踪指数（双创 20%、主板 10%），
+    仅凭代码无法判定 ⇒ 取最宽口径，**宁可漏报也不误报**（这是安全方向）。
+    ⚠️ **ST 股（±5%）会被按 10% 处理 ⇒ 只会"漏报" 5%~11% 的送转，不会误报**
+    （合法波动 ≤5%，低于 11% 阈值）。同样是安全方向。
+    """
+    code = str(tx_code or "").strip().lower()
+    num = code[2:] if code[:2] in ("sh", "sz") else code
+    if not num.isdigit() or len(num) != 6:
+        return CORPORATE_ACTION_THRESHOLD      # 判不了就用最保守的固定阈值
+    if code.startswith("sh"):
+        if num.startswith("688"):
+            return 0.20
+        if num.startswith("5"):
+            return 0.20
+        return 0.10
+    if code.startswith("sz"):
+        if num.startswith("30"):
+            return 0.20
+        if num.startswith(("15", "16", "18")):
+            return 0.20
+        return 0.10
+    if num.startswith(("4", "8", "920")):
+        return 0.30
+    return CORPORATE_ACTION_THRESHOLD
 
 
 def detect_corporate_actions(df: pd.DataFrame,
                              *,
-                             threshold: float = CORPORATE_ACTION_THRESHOLD) -> pd.DataFrame:
+                             threshold: Optional[float] = None,
+                             tx_code: Optional[str] = None,
+                             skip_first_bars: int = NEW_LISTING_BARS) -> pd.DataFrame:
     """检测未复权序列中疑似**企业行为**造成的断崖。
 
-    判据：单日 ``|收益| > threshold``（默认 22%，高于单日涨跌幅上限 20%）。
+    判据：单日 ``|收益| > threshold``。
+
+    - 传了 ``tx_code`` ⇒ 阈值 = :func:`price_limit` + :data:`LIMIT_BUFFER`
+      （主板 11% / 双创与 ETF 21% / 北交所 31%）。
+      这比旧的固定 22% **灵敏得多**：实测 002371 那处 −21.95% 的 10 转 3 型除权
+      旧阈值抓不到，新阈值能抓到。
+    - 没传 ``tx_code`` ⇒ 退回固定 :data:`CORPORATE_ACTION_THRESHOLD`（22%，旧的保守口径）。
+    - ``skip_first_bars``：跳过序列开头 N 根（**新股上市初期无涨跌幅限制**，
+      用低阈值会把首日暴涨当成企业行为）。
 
     Returns:
         DataFrame（列 :data:`CA_COLUMNS`，按日期升序）；无事件时返回**空表**（不是 None）。
@@ -306,18 +374,27 @@ def detect_corporate_actions(df: pd.DataFrame,
     d = d.dropna(subset=["date", "close"]).sort_values("date").reset_index(drop=True)
     if len(d) < 2:
         return pd.DataFrame(columns=list(CA_COLUMNS))
+    if threshold is None:
+        threshold = (price_limit(tx_code) + LIMIT_BUFFER) if tx_code \
+            else CORPORATE_ACTION_THRESHOLD
+    d["_pos"] = d.index                      # 保留原始位置，用于"上市初期豁免"
     d["prev_date"] = d["date"].shift(1)
     d["prev_close"] = d["close"].shift(1)
     # prev_close = 0 不可能出现（价格为 0 的日线已被上游剔除），除法安全
     d["factor"] = d["close"] / d["prev_close"]
     d["ret"] = d["factor"] - 1.0
     ev = d[d["ret"].abs() > float(threshold)].dropna(subset=["prev_close", "factor"])
+    if skip_first_bars > 0 and len(d) >= MIN_BARS_FOR_LISTING_SKIP:
+        # ⚠️ 必须按**事件在序列中的位置**过滤，不是按事件列表的前 N 条
+        #   （早先写错成 ev.iloc[N:] —— 那会砍掉前 N 个事件，几乎等于全部不修）
+        ev = ev[ev["_pos"] >= int(skip_first_bars)]
     return ev[list(CA_COLUMNS)].reset_index(drop=True)
 
 
 def adjust_corporate_actions(df: pd.DataFrame,
                              *,
-                             threshold: float = CORPORATE_ACTION_THRESHOLD,
+                             threshold: Optional[float] = None,
+                             tx_code: Optional[str] = None,
                              events: Optional[pd.DataFrame] = None):
     """前复权（以**最新价**为锚）修复企业行为断崖。
 
@@ -334,7 +411,7 @@ def adjust_corporate_actions(df: pd.DataFrame,
     if df is None or df.empty:
         return df, pd.DataFrame(columns=list(CA_COLUMNS))
     if events is None:
-        events = detect_corporate_actions(df, threshold=threshold)
+        events = detect_corporate_actions(df, threshold=threshold, tx_code=tx_code)
 
     out = df.copy()
     out["date"] = pd.to_datetime(out["date"], errors="coerce")
@@ -366,11 +443,12 @@ def _finalize(df: Optional[pd.DataFrame],
         return df
     events = None
     if adjust and kind == KIND_EQUITY:
-        df, events = adjust_corporate_actions(df)
+        df, events = adjust_corporate_actions(df, tx_code=tx_code)
         if events is not None and not events.empty:
             logger.warning(
-                "检测到 %d 处疑似企业行为（未复权断崖），已按前复权修复: %s —— "
-                "请人工复核是否为份额折算/拆分。", len(events), tx_code)
+                "检测到 %d 处疑似企业行为（未复权断崖），已按前复权修复: %s "
+                "（阈值 %.2f%%）—— 请人工复核是否为份额折算/拆分/送转。",
+                len(events), tx_code, 100 * (price_limit(tx_code) + LIMIT_BUFFER))
             for _, e in events.iterrows():
                 logger.warning(
                     "    %s 前收 %.4f → 收 %.4f（%+.2f%%，因子 %.4f）",
@@ -566,6 +644,10 @@ __all__ = [
     "OHLCV_COLUMNS",
     "CA_COLUMNS",
     "CORPORATE_ACTION_THRESHOLD",
+    "LIMIT_BUFFER",
+    "NEW_LISTING_BARS",
+    "MIN_BARS_FOR_LISTING_SKIP",
+    "price_limit",
     "CACHE_DIR",
     "normalize_tx_code",
     "resolve_kind",
