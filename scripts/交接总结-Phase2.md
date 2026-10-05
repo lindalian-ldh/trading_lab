@@ -1,75 +1,101 @@
-# 交接总结 · Phase 2（ETF 择时增强）
+# 交接总结 · Phase 2/3（ETF 择时增强 + 主题观察哨）
 
-> **用途**：新开会话做 Phase 2 时，把这一份贴进去即可恢复上下文。
-> **最后更新**：2026-10-04
-> **配套文档**（Phase 2 的完整规格，**必读**）：
-> [`增强方案v2-板块轮动面板与ETF择时.md`](增强方案v2-板块轮动面板与ETF择时.md) 的
-> **第五章 Phase 2** + **P0.5 冻结清单** + **P0.5-A 面板口径** + **第八章 不要做的事**
-> 旧文档 [`交接总结.md`](交接总结.md) 仍然有效（已验证的统计结论都在里面），
-> 但它"下一步"那两件事已被本方案取代，**以本文件为准**。
+> **用途**：新开会话时把这**一份**贴进去即可恢复上下文。
+> **最后更新**：2026-10-05
+> **配套文档（按需查阅，不必先读）**：
+> - 完整规格与全部完成记录：[`增强方案v2-板块轮动面板与ETF择时.md`](增强方案v2-板块轮动面板与ETF择时.md)
+>   （含 **P0.5 冻结基准 v1**（12 条修订记录）+ 「P2.1~P2.4 完成记录」+「P3 完成记录」+「P0.4c」）
+> - 新人上手 / 命令与读数：[`命令速查-Phase2与Phase3.md`](命令速查-Phase2与Phase3.md)
+> - 旧文档 [`交接总结.md`](交接总结.md) 的**§二「已验证统计结论」仍然有效**，
+>   但它的「下一步」两件事已被取代 —— **以本文件为准**
 
 ---
 
-## 0. 一句话状态
+## 0. 系统状态总览（**交接用，权威**）
 
-**P0.4a / P0.4b / P0.5 / P2.1~P2.4 全部完成。结论：右侧择时（L1 结构破坏 / L2 均线转向 / RS）
-未通过预注册判据 ⇒ 不进入仓位逻辑，退化为"观察哨"；P2.5/P2.6 不建，P2.7 不执行（OOS 段保持锁定）。**
+### 0.1 一句话状态
 
-**2026-10-04 追加：半导体系已换指数并重跑（P0.5 修订 #11）** ——
-`sz399363` → `sh000039` 上证信息（选择规则在跑数前声明：取 5 只 ETF × 2 窗口的**最小**相关性最大者，实测 0.835）。
-结果：**P0.4b 的可验证主题 4 → 6，需合成 3 → 1（只剩电网设备）**；
-但 **P2.2 联合频次仍全部 <2 次/年、P2.3 的 L1 仍未通过 ⇒ 投资结论不变**（仍不采用、退化为观察哨）。
-唯一值得记的是 `sh000039` 上的 **L2**：`D=+4.10pp`、placebo `p=0.030`、两段同号，
-但只有 15 个片段（MDE 8.17pp）⇒ **不通过**，只作未来更高功效预注册的线索。
+**Phase 0 / 1 / 2 / 3 与 P0.4c 全部完成。**
+**结论：右侧择时（L1 结构破坏 / L2 均线转向 / RS 相对强度）未通过 P0.5 预注册判据
+⇒ 不进入仓位逻辑，退化为「观察哨」（只显示、不决策）。**
+**OOS 锁定段（2024-01-01 ~ 2026-09-30）至今未动用**，留给未来功效更好的假设。
+**P0.4c 打通了「合成主题指数」能力**，解决了原先"3 个主题没有可用指数"的问题
+（含你的主线「半导体设备」所在的半导体系，但那 4 个主题目前仍用宽泛代理）。
 
-**2026-10-04 追加 2：观察项扩展（`WATCH_ONLY`）** —— 想看更多 ETF 不必改动 `THEMES`。
-新增 5 个观察项（红利/电力/有色金属/煤炭/银行），全部过 ≥10 年 + ≥0.8（相关性 0.96~0.99）：
-`WATCH_ONLY` 只有指数 + ETF、**没有题材** ⇒ 只进观察哨与 Phase 2/3 审计，**永不进板块轮动面板**。
-四个脚本改用 `all_observed()`，保留 `--themes-only` 复现旧口径。
-副产品：新增的 **RS 退化检查**（主题×锚相关 >0.85）一次抓出 8 例
-（科创系 2 + 半导体系 4 与创业板指 0.851 + 云计算/消费电子 2 与创业板指 0.903），
-**反向印证了 P2.4「RS 无增量 ⇒ 删」的结论**。
+### 0.2 已完成（按层）
 
-**2026-10-04 追加 3：第二批观察项** —— 按同一流程（勘探 → 登记指数 → 加表）再加 4 个：
-军工 `sz399973`(0.970)、创新药 `sz399441`(0.957，宽基医药代理)、证券 `sz399975`(0.990)、
-机器人 `sz399283`(0.898，**指数只有 6.6 年**，已标注"只观察、不作验证依据")。
-**4 个被拒**：卫星/航天（sh/sz 无指数，ETF 上市不足 1.5 年）、稀土（代理近 500 日 0.785 <0.8）、
-恒生科技（港股，不在 sh/sz 通道）。现在共 19 个观察项 / 13 条不同价格序列。
+| 层 | 内容 | 关键产出 | 状态 |
+|---|---|---|---|
+| **P0.1 数据源** | 腾讯源指数/ETF/个股 + CSV 缓存 + 代码歧义保护 | [`core/marketdata_tx.py`](../core/marketdata_tx.py) | ✅ |
+| **P0.1+ 企业行为** | 阈值**按代码推定**（主板 11% / 双创与 ETF 21% / 北交所 31%）+ 前复权 | [`scripts/audit_corporate_actions.py`](audit_corporate_actions.py) | ✅ 残余可疑 **0** |
+| **P0.2 主题宇宙** | 10 主题（含题材）+ **12 观察项**（无题材）+ 2 个代理项 | [`core/theme_universe.py`](../core/theme_universe.py) | ✅ |
+| **P0.3 龙虎榜** | 424 天回填 / 0 缺口 / Tier1+Tier2 | [`core/lhb_store.py`](../core/lhb_store.py) | ✅ |
+| **P1 轮动面板** | 上榜率+持续性+买卖比超额，挂进 daily | [`core/rotation_panel.py`](../core/rotation_panel.py) | ✅ 口径 v1 冻结 |
+| **P0.4a/b** | 主题指数可用性审计（≥10 年 + 与 ETF 相关性 ≥0.8） | [`scripts/audit_theme_index.py`](audit_theme_index.py) | ✅ **18 可用 / 0 需合成 / 4 受限** |
+| **P0.5** | 预注册冻结基准 v1（含 12 条修订记录） | 方案文档 §五 | ✅ |
+| **P2.1~P2.4** | L1 / L2 / RS 三层 + 频次 + 收益 + 边际贡献审计 | [`core/theme_timing.py`](../core/theme_timing.py)、[`core/signal_stats.py`](../core/signal_stats.py)、`scripts/audit_theme_{signals,returns}.py` | ✅ **全部未通过** |
+| **P2.5~P2.7** | 不建仓位映射 / 仲裁表退化为一句话 / **不执行 OOS** | 方案文档 | ✅ 按 kill 判据 |
+| **P3** | 观察哨 + 主题台账 + 「只显示不决策」契约 + 接进 daily | [`core/theme_sentinel.py`](../core/theme_sentinel.py)、[`scripts/theme_timing_report.py`](theme_timing_report.py) | ✅ daily 8 个任务 |
+| **P0.4c** | **合成主题指数能力**（模块 + CLI + 2 条已上线合成指数） | [`core/synth_index.py`](../core/synth_index.py)、[`scripts/build_synth_index.py`](build_synth_index.py) | ✅ |
 
-**2026-10-04 追加 4：卫星/航天用军工代理加入** —— 二者在 sh/sz **没有任何指数**，
-按你的决定用`sz399973` 中证国防代理（**复用军工的指数，不各挑一个**，否则会把
-三个相关 0.95+ 的军工指数伪装成独立覆盖）。卫星 min=0.873 但**只基于 214 个交易日**（脆弱）；
-航天 min=0.925（sz159638 有 1002 日重叠，相对可信）。
-观察项 21 个、不同价格序列**仍是 13 条**；稀土与恒生科技仍未加入（原因见模块注释）。
+**P0.4c 的两条合成指数**（这是本轮最实的增量）：
 
-**2026-10-05 P0.4c ①完成**：企业行为阈值由固定 22% 改为**按代码推定**
-（`price_limit`：主板 10% / 科创创业 20% / 基金 20% / 北交所 30%，+1pp；前 10 根豁免）
-⇒ 门禁「残余可疑」**3 → 0**，`sz002371`/`sh603690`/`sh600641` 的非法单日变动全部修复到 ≤10.1%。
-ETF 事件数未变 ⇒ 所有主题相关性逐位相同，Phase 2 结论零影响。
-副产品：**北交所 920xxx 腾讯源取不到**，已显式拒绝（不再静默猜市场）。
+| 主题 | 成分股 | 历史 | vs ETF 相关性 | 原方案 |
+|---|---|---|---|---|
+| **稀土** | 题材 801016 的 80 只 → 人工复核 **24 只** | 2855 根（**11.7 年**） | **0.941~0.943** | 有色代理只有 0.785 ❌ |
+| **电网设备** | 题材 801346 的 500 只 → 人工复核 **39 只** | 2855 根（**11.7 年**） | **0.844~0.914** | 中证新能只有 0.686 ❌ |
 
-**2026-10-05 P0.4c ②③④ 完成：稀土合成指数建成并加入观察哨** ——
-`core/synth_index.py`（等权逐日再平衡 + OHLC 合成 + `time_in` 时点还原）+ `scripts/build_synth_index.py`；
-题材 `801016` 原始 80 只含大量污染（水表/医疗/种业），用户复核出 **24 只**；
-合成 **2855 根（2015-01-05 起，11.7 年）**，与 3 只稀土 ETF 相关性 **0.941~0.943** ✅（原代理仅 0.785）。
-新机制 `synth:` 代码前缀 ⇒ 哨表与审计无需改动。**电网设备也已解决**（P0.5 修订 #12）：题材 801346（500 只）→ 用户复核 39 只 →
-合成指数 `synth:电网设备`（11.7 年），与 3 只电网设备 ETF 相关性 **0.844~0.914**
-（原 `sz399808` 中证新能仅 0.686）⇒ **P0.4b 的「❌ 需合成」归零**。
-⚠️ 电网设备 ETF 全部 2024-09 后上市 ⇒ 验证窗口只有 428~498 日，比稀土脆弱。
+### 0.3 关键数字（复跑命令见 §7）
 
-**Phase 3 已完成**：观察哨已落地并挂进每日流程（`scripts/theme_timing_report.py`，
-**只显示、不决策**），主题级台账 `data/observations/theme_signal_ledger.csv`，
-daily 场景从 7 个任务变 **8 个**。
+```
+观察宇宙        10 主题 + 12 观察项 = 22 项 | 不同价格序列 14 条
+                共用序列：sh000039×4、sz399973×3（军工/卫星/航天）、sh000998×2、sh000688×2、sh000819×2
+合成指数        2 条（synth:稀土 / synth:电网设备），均已入库（含成分股清单）
+代理项          2 个（卫星→军工、航天→军工；复用被代理主题的指数）
+P0.4b           ✅ 可用 18 / ❌ 需合成 0 / ⚠️ 受限 4（第三代半导体无 ETF、科创系 2 个 6.7y、机器人 6.6y）
+P2.2 联合频次    L1 单层 4.8~5.0 次/年；**L1+L2 同日 AND 仅 0.00~0.88 次/年**（< kill 线 2）⇒ kill criterion 3
+P2.3 收益审计    **通过的格数 = 0**（修掉"用错标的"的那一格之后）；4 条有效序列上 L1 的 t 仅 −0.42~+1.00
+P2.7 OOS        **未动用**（2024-01-01~2026-09-30 仍锁定）
+测试             pytest tests/ → 388 passed；pytest services/calc_indicators/ → 35 passed
+门禁             verify_marketdata 0 / audit_corporate_actions 0 / 观察哨 --gate 0 / verify_regime 13/13
+每日流程         run_all.py daily = 8 个任务（lhb → rotation_panel → **theme_sentinel** → …）
+主题台账         data/observations/theme_signal_ledger.csv（目前只有 1 个交易日 / 22 行，**需逐日累积**）
+```
 
-**下一步可选**：① 做 P0.4c 合成指数，把主线「半导体设备」救回可验证范围后重跑
-P2.2/P2.3（代价：个股层复权要改用 baostock 复权价，且样本功效仍受 ~40 个片段限制）；
-② 换一个新预注册假设（如"PANIC_DOWN 后右侧 L1 加仓"的两阶段假设，或把 5 条序列
-**合并池化**以凑到 149+ 轮的功效）。
-详见 [`增强方案v2-板块轮动面板与ETF择时.md`](增强方案v2-板块轮动面板与ETF择时.md) 的
-**「P2.1~P2.4 完成记录」**与**「P3 完成记录」**两节。
+### 0.4 待完成（按优先级）
 
-> 旧文档 [`交接总结.md`](交接总结.md) 仍然有效（已验证的统计结论都在里面），
-> 但它"下一步"那两件事已被本方案取代，**以本文件为准**。
+**A. 有明确价值、可直接做**
+
+| # | 事项 | 为什么值得做 | 入口 |
+|---|---|---|---|
+| A1 | **给半导体系做合成指数** | 「半导体设备/材料/芯片/第三代半导体」现在仍用 `sh000039` **上证信息**（宽泛 IT 代理，0.841）—— **这是你主线唯一还是"代理"的地方**。P0.4c 流程已走通两遍，照做即可拿到语义正确的 0.9+ 指数 | `scripts/build_synth_index.py --plate 801490 --rank --ref-etf sh562590` |
+| A2 | **恒生科技** | 唯一"评估后未加入"的方向。需要先给 `marketdata_tx` 加**港股通路**（新代码格式，打破"只收 sh/sz"前提）；且恒生科技指数只有 ~6 年 | 见 `core/theme_universe.py` 注释 |
+| A3 | **北交所通路** | `920xxx` 腾讯源取不到（bj/sz/sh 全失败，已显式拒绝）⇒ 合成指数**丢了真实成分股**（西磁科技/九菱科技/奔朗新材等磁材公司） | 需换数据源或加第二条通路 |
+| A4 | **台账前向验证** | `theme_signal_ledger.csv` 目前只有 1 天。**前向验证是这套系统唯一的出路**（回测已证明不可判定）；另外 `analyze_signal_ledger.py` 还没有按 `signal_family` 切片的支持 | 每日 `theme_timing_report.py --save`（已挂进 daily） |
+| A5 | **新预注册假设（会动用 OOS）** | OOS 是**一次性资源**，现在锁着。可选项：① 跨主题**池化**（把 ~200 个片段合起来凑功效，`进化路径.md`：检出 +2pp 需 149 轮）；② "PANIC_DOWN 后右侧确认再加仓"的两阶段假设。**线索**：`sh000039` 上的 L2 是唯一过了四项中两项的（D=+4.10pp、placebo 0.030、两段同号，但只有 15 片段 / MDE 8.17pp） | 必须先写**冻结基准 v2**，再做 |
+
+**B. 已知弱点（已记录、未解决，用的时候要记得）**
+
+| # | 弱点 | 影响 |
+|---|---|---|
+| B1 | **RS「风格」列在 6 个主题上退化**（半导体系 4 个 + 云计算/消费电子，与创业板指相关 0.851/0.903） | 未换锚（那是改冻结项 §G1），只加了「大盘」显示列作补偿 |
+| B2 | **电网设备的验证窗口只有 428~498 个交易日**（电网设备 ETF 全部 2024-09 后上市） | 相关性比稀土脆弱一倍多；审计已自动打「重叠 <500 日」告警 |
+| B3 | **合成指数带残余幸存者偏差**（zzshare 不提供 `time_out`） | 已用 `SYNTH_START=2015` 控制，但**不可宣称无偏** |
+| B4 | `audit_regime_lookahead.py` **未跑完**（>8 分钟，我中止了） | 这是**唯一没确认的既有自检**；它不 import `core.marketdata_tx`，与本轮改动无关 |
+| B5 | 合成指数的成分股清单是**人工判断** | 换人复核可能得出不同名单；清单已入库（`data/synth/*.txt`）作为来源记录 |
+
+**C. 明确不做**（方案文档第八章 + 本轮新增）
+
+见 §9「不要做的事」。
+
+### 0.5 下一个会话最该做的三件事
+
+1. **先跑体检**（§7 的清单，全部 exit 0 才算环境正常）——尤其确认
+   `data/cache/synth_*.csv` 与 `data/synth/*.txt` 在（它们已入库，缺了会直接导致测试失败）。
+2. **若想验证你的主线** → 做 **A1（给半导体系做合成指数）**。这是当前性价比最高的一步：
+   流程已在稀土/电网设备上走通两遍，产物能直接把 0.841 的宽泛代理换成语义正确的指数。
+3. **若想动 OOS** → 先写**冻结基准 v2**（新的预注册），并且**只开一次**。
+   不要在没写新预注册的情况下顺手把 2024 年之后的数据算进来。
 
 ---
 
@@ -85,6 +111,10 @@ P2.2/P2.3（代价：个股层复权要改用 baostock 复权价，且样本功�
 | 6 | **macOS 没有 `timeout` 命令** | 用 Python 自己的超时或 bash `sleep` |
 | 7 | **`main.py --help` 里 `%` 要写 `%%`** | argparse 会对 help 做 `%` 格式化 |
 | 8 | **看到 `\|t\| > 5` 先假定自己有 bug** | 优先核对"时间对齐"与"样本独立性"（见 §6 的两次前科） |
+| 9 | **北交所（`920xxx`/`4xxxxx`/`8xxxxx`）腾讯源取不到** | 实测 bj/sz/sh 三种前缀全失败 ⇒ `normalize_tx_code` **已显式拒绝**，别再试着猜前缀 |
+| 10 | **`synth:` 是合成指数的代码前缀** | `fetch_index_history("synth:稀土")` 读 `data/cache/synth_稀土_history.csv`。**该文件与 `data/synth/*.txt` 已入库**（缺了 `pytest tests/` 会失败） |
+| 11 | **`audit_regime_lookahead.py` 很慢**（>8 分钟） | 别放进体检串行跑；它是唯一没确认的既有自检（见 §0.4 B4） |
+| 12 | **沙箱里 `ps`/`find` 可能被拒** | 用 `pgrep -fl`、`glob` 工具替代 |
 
 ---
 
@@ -157,6 +187,9 @@ uv run python scripts/lhb_update.py --tier 2 --recent 90 --end <昨天> --thrott
 
 ---
 
+> ⚠️ **以下为历史规格（已于 2026-10-05 全部执行完毕）——留作背景，不是待办。**
+> 当前状态与待办请看 **§0**。
+
 ## 4. Phase 2 要做什么（**范围与坑都已在方案文档第五章定好**）
 
 ### 定位
@@ -206,6 +239,9 @@ uv run python scripts/lhb_update.py --tier 2 --recent 90 --end <昨天> --thrott
 > **砍掉无增量的一层是这套方法论正常工作，不是失败。**
 
 ---
+
+> ⚠️ **以下为历史规格（已于 2026-10-05 全部执行完毕）——留作背景，不是待办。**
+> 当前状态与待办请看 **§0**。
 
 ## 5. Phase 2 的两个前置（**开工前完成**）
 
@@ -265,70 +301,114 @@ uv run python scripts/lhb_update.py --tier 2 --recent 90 --end <昨天> --thrott
 
 ---
 
-## 7. 关键命令速查
+## 7. 关键命令速查（2026-10-05 更新）
 
 ```bash
 cd /Users/a801/Linda/Work/project/gupiao-assistant/trading_lab
+# 沙箱里用 .venv/bin/python；你自己的终端可用 uv run python
 
-# —— 体检（5 个门禁，全部 exit 0 才算健康）——
-.venv/bin/python scripts/verify_marketdata.py            # 行情覆盖
-.venv/bin/python scripts/list_themes.py                  # 主题宇宙审计
-.venv/bin/python scripts/lhb_update.py --status          # 龙虎榜累积 + 静默空洞
-.venv/bin/python scripts/rotation_panel.py               # 面板可渲染
-.venv/bin/python services/calc_indicators/verify_regime.py   # 13/13
+# ================= 体检（全部 exit 0 才算环境正常）=================
+.venv/bin/python scripts/verify_marketdata.py                    # 行情覆盖
+.venv/bin/python scripts/audit_corporate_actions.py               # 企业行为门禁（残余可疑应为 0）
+.venv/bin/python scripts/theme_timing_report.py --gate            # 观察哨（22 项，数据不可用则 exit 1）
+.venv/bin/python scripts/list_themes.py                           # 主题宇宙审计
+.venv/bin/python scripts/lhb_update.py --status                   # 龙虎榜累积 + 静默空洞
+.venv/bin/python scripts/rotation_panel.py                        # 面板可渲染
+.venv/bin/python services/calc_indicators/verify_regime.py        # 应 13/13
+.venv/bin/python services/calc_indicators/verify_etf_mode.py --offline   # 应 28/28
+.venv/bin/python services/calc_indicators/verify_entry_gate.py    # 应 24/27（3 项已知失败）
 
-# —— 测试 ——
-.venv/bin/python -m pytest tests/ -q                     # 274 passed
-.venv/bin/python -m pytest services/calc_indicators/ -q   # 35 passed
+# ================= 测试 =================
+.venv/bin/python -m pytest tests/ -q                              # 应 388 passed
+.venv/bin/python -m pytest services/calc_indicators/ -q            # 应 35 passed
 
-# —— 龙虎榜 ——
-.venv/bin/python scripts/lhb_update.py                   # 每日增量（Tier1）
-.venv/bin/python scripts/lhb_update.py --tier 2 --recent 90   # 补最近 90 天毛额
-.venv/bin/python scripts/lhb_update.py --backfill        # 全量回填（可断点续跑）
+# ================= 每日 =================
+.venv/bin/python scripts/theme_timing_report.py --date <交易日> --save   # 观察哨 + 主题台账
+.venv/bin/python scripts/run_all.py --dry-run                     # daily 应为 8 个任务
 
-# —— 面板 ——
-.venv/bin/python scripts/rotation_panel.py --save        # 最新交易日 + 存快照
-.venv/bin/python scripts/rotation_panel.py --date 2026-09-30   # 历史日期（可复现）
-.venv/bin/python scripts/rotation_panel.py --backfill 20       # 回看最近 20 天
-.venv/bin/python scripts/rotation_panel.py --json             # 机器可读
+# ================= 研究工具（不是健康门禁）=================
+.venv/bin/python scripts/audit_theme_index.py                     # P0.4b 主题指数可用性（18/0/4）
+.venv/bin/python scripts/audit_theme_index.py --gate              # 注意：--gate 当前 exit 1，那是研究结论
+.venv/bin/python scripts/audit_theme_signals.py                   # P2.2 频次审计
+.venv/bin/python scripts/audit_theme_returns.py --holds 5,10,20,40 # P2.3+P2.4 收益审计（1~3 分钟）
+.venv/bin/python scripts/explore_theme_index_candidates.py        # 加主题/换指数前勘探候选
 
-# —— 全流程（dry-run 先看）——
-.venv/bin/python scripts/run_all.py --dry-run            # daily = 7 个任务
+# ================= 合成指数（P0.4c）=================
+# ① 出成分股复核清单（诊断用，**不许拿来筛成分股**）
+.venv/bin/python scripts/build_synth_index.py --plate 801490 --name 半导体设备 \
+    --rank --ref-etf sh562590
+# ② 用人工复核过的清单合成 + 验证 + 落盘（落盘后代码即 synth:<name>）
+.venv/bin/python scripts/build_synth_index.py --plate 801490 --name 半导体设备 \
+    --include-file data/synth/半导体设备_members.txt --ignore-time-in \
+    --validate sh562590,sh561980,sh512480 --save
 
-# —— Phase 2 会复用的审计模板 ——
-.venv/bin/python scripts/audit_regime_hold.py            # 持有期 + 多指数 + 分段
-.venv/bin/python scripts/audit_regime_robustness.py --index sh000001   # 阈值敏感 + placebo
-.venv/bin/python scripts/audit_regime_oos.py             # 样本外分段
-.venv/bin/python scripts/audit_regime_lookahead.py       # 无未来函数（应通过）
+# ================= 龙虎榜 / 面板 =================
+.venv/bin/python scripts/lhb_update.py                          # 每日增量（Tier1）
+.venv/bin/python scripts/lhb_update.py --tier 2 --recent 90      # 补最近 90 天毛额
+.venv/bin/python scripts/rotation_panel.py --save                # 最新交易日 + 存快照
+.venv/bin/python scripts/rotation_panel.py --date 2026-09-30     # 历史日期（可复现）
+
+# ================= 旧审计模板 =================
+.venv/bin/python scripts/audit_regime_hold.py                    # 持有期 + 多指数 + 分段
+.venv/bin/python scripts/audit_regime_oos.py                     # 样本外分段
+.venv/bin/python scripts/audit_regime_lookahead.py               # 无未来函数（**很慢，>8 分钟**）
 ```
 
----
+> ⚠️ `audit_theme_index.py --gate` 与 `audit_theme_signals.py --gate` 当前返回 **1**，
+> 那是把本轮研究结论编码成了门禁（0 需合成 / 联合频次不足），**不是环境坏了**。
 
-## 8. 文件地图（本会话新增）
+## 8. 文件地图
 
 ```
 core/
-  marketdata_tx.py           腾讯源数据层（指数/ETF/个股 + 缓存 + 歧义保护）
+  marketdata_tx.py           腾讯源数据层（指数/ETF/个股 + 缓存 + 歧义保护
+                             + **企业行为检测/前复权** + **按代码推定阈值** + synth: 转发）
   lhb_store.py               龙虎榜累积层（Tier1/Tier2 + 题材 + 题材热度 + 成分股）
-  theme_universe.py          主题宇宙定义（10 主题 = 窄题材并集）
+  theme_universe.py          主题宇宙（**THEMES 10 主题** + **WATCH_ONLY 12 观察项** + all_observed()）
   rotation_panel.py          轮动面板零 IO 聚合（口径冻结 v1）
+  theme_timing.py            Phase 2 三层：L1 结构破坏 / L2 均线转向 / RS 相对强度
+                             （含 l1_state/l1_pending、摆动点、片段计数）
+  signal_stats.py            P2.3 统计内核（前向收益 + **块长=H 块 bootstrap** + 片段匹配 placebo + MDE）
+  theme_sentinel.py          Phase 3 观察哨（分区渲染 + RS 退化/历史不足/待确认 + 两列相对强度）
+  synth_index.py             P0.4c 合成指数（等权逐日再平衡 + OHLC 合成 + synth: 加载）
 scripts/
+  # —— 门禁/体检 ——
   verify_marketdata.py       行情覆盖门禁
-  lhb_update.py              龙虎榜 CLI
+  audit_corporate_actions.py 企业行为门禁（exit 0 = 干净）
+  theme_timing_report.py     观察哨 CLI（--date/--save/--json/--gate/--themes-only）
   list_themes.py             主题宇宙审计门禁
+  lhb_update.py              龙虎榜 CLI
   rotation_panel.py          面板渲染 CLI
-  run_all.py                 (M) daily/full 加 lhb → rotation_panel
-  增强方案v2-....md           方案 + 冻结口径 + 完成记录（**Phase 2 的规格**）
+  run_all.py                 (M) daily 现为 **8 个任务**（加 lhb、rotation_panel、theme_sentinel）
+  # —— 研究工具（失败即研究结论，不是环境故障）——
+  audit_theme_index.py       P0.4b 指数可用性（≥10 年 + 相关性 ≥0.8）
+  audit_theme_signals.py     P2.2 频次审计
+  audit_theme_returns.py     P2.3 收益 + P2.4 边际贡献
+  explore_theme_index_candidates.py  加主题/换指数前的候选勘探
+  build_synth_index.py       P0.4c 合成指数 CLI（--rank / --include-file / --validate / --save）
 tests/
-  test_marketdata_tx.py      51
+  test_marketdata_tx.py      78（含企业行为/按代码阈值/北交所拒绝）
   test_lhb_store.py          59
-  test_theme_universe.py     36
+  test_theme_universe.py     36+
   test_rotation_panel.py     43
+  test_theme_timing.py       27（含无未来函数截断不变性、方向守卫、冻结参数守卫）
+  test_signal_stats.py       14（含"块 bootstrap 必须比朴素 t 更保守"）
+  test_theme_sentinel.py     28+（含数据不可用、两列相对强度、代理项一致性）
+  test_synth_index.py        16（等权链式、时点还原、缺数据剔除、OHLC 合成）
+data/
+  cache/synth_稀土_history.csv、cache/synth_电网设备_history.csv   ← **已入库**
+  synth/稀土_members.txt、synth/电网设备_members.txt                ← **已入库**（来源记录）
+  observations/theme_signal_ledger.csv                             ← 主题级台账（逐日累积）
+文档：
+  增强方案v2-板块轮动面板与ETF择时.md   规格 + P0.5 冻结基准 v1 + 各阶段完成记录（最全）
+  命令速查-Phase2与Phase3.md            新人上手 / 每条命令怎么读
+  交接总结-Phase2.md                    **本文件**（§0 = 权威状态总览）
+  交接总结.md                           旧文（§二统计结论仍有效）
+  P0.5-预注册复核表.md / P0.4c-稀土成分股复核表.md / P0.4c-电网设备成分股复核表.md  复核过程记录
 ```
 
-**git**：本会话产出两个提交
-`8b29a7f` 腾讯源 + 移除东财 ｜ `db02555` 龙虎榜/主题/面板
-（**已提交未 push**；remote = `https://github.com/lindalian-ldh/trading_lab.git`）
+**git**：本轮（2026-10-04/05）产出 12 个提交，最新 `52e2cae`。
+**已提交未 push**；remote = `https://github.com/lindalian-ldh/trading_lab.git`
 
 ---
 
@@ -358,12 +438,21 @@ tests/
 > **需求 #1 已上线**：一块"仪表盘"，用龙虎榜归一化上榜率 + 持续性 + 买卖比超额，
 > 让你每天 10 秒形成板块轮动印象。**它只显示，不决策。**
 >
-> **需求 #2（Phase 2）是真正的增强**：把择时从"只等 PANIC_DOWN"扩成"左侧 + 右侧"的仓位调档阶梯。
-> 已知数据底座够用（腾讯源给了 10~20 年主题指数历史），
-> **最大的风险不是技术，而是多重检验**（三层 × 阈值 × 持有期 × 主题）
-> ⇒ **先把 P0.5 冻结，再跑任何回测。**
+> **需求 #2（Phase 2）做完了，结论是"不采用"**：把择时从"只等 PANIC_DOWN"扩成
+> "左侧 + 右侧"的仓位调档阶梯 —— 这条路**没走通**。三层（L1 结构破坏 / L2 均线转向 /
+> RS 相对强度）在 4 条有效价格序列上**全部未通过**预注册判据；联合层更被
+> **kill criterion 3** 判出局（0.38~0.88 次/年 < 2）。唯一那一格"通过"是
+> **用错标的**（中证新能冒充电网设备）的产物。
 >
-> **最可能的结局是 L1+L2 两层 + 仓位中枢调档，RS 被砍。那不是失败。**
+> **但这不是失败，是预注册方法在正常工作**：它在**没烧掉 OOS 段**的情况下就否掉了假设。
+> 更准确的措辞是 —— **"不可判定"多于"已证伪"**（MDE 3~4.5pp，而目标效应量级是 +2pp；
+> `进化路径.md`：检出 +2pp 需 **149 轮**，我们每条序列只有 19~48 个片段）。
+>
+> **本轮真正的增量有两块**：① **数据层**（发现腾讯 ETF 日线未复权，修好企业行为检测，
+> 把 0.990 的相关性从 0.666 里救回来）；② **P0.4c 合成主题指数能力**（稀土 0.941~0.943、
+> 电网设备 0.844~0.914，历史 11.7 年）—— 它把"没有可用指数"这个结构性障碍解决了。
+>
+> **下一步最值钱的一步**是 §0.4 的 **A1：给半导体系做合成指数**（那是你主线唯一还是"代理"的地方）。
 
 ---
 
@@ -411,3 +500,58 @@ tests/
 | 17 | **不要把 10 个主题当成 10 个独立复现**（只有 5 条价格序列） |
 | 18 | **不要在样本内不通过时打开 OOS**（OOS 是**一次性**资源，留着给功效更好的假设） |
 | 19 | **不要为了救频次把"同日 AND"放宽成"N 日内共现"**（那是改冻结项） |
+| 20 | **不要用未复权的腾讯 ETF/个股价算收益或相关性**（`fetch_equity_history` 默认 `adjust=True`，别绕过） |
+| 21 | **不要用日级朴素 t 判定重叠 H 日窗口的显著性**（必须用 `core/signal_stats` 的块长=H 块 bootstrap） |
+| 22 | **不要把 22 个观察项当成 22 次独立观测**（只有 **14 条**不同价格序列） |
+| 23 | **不要按"与 ETF 的相关性"筛合成指数的成分股**（会让 ≥0.8 的验证变成循环论证） |
+| 24 | **不要在样本内不通过时打开 OOS**（一次性资源，留给功效更好的假设） |
+| 25 | **不要把 `RS 大盘` 那列塞进冻结组合或判据**（它是事后加的显示列，进了就是"看到数据后加假设"） |
+| 26 | **不要给北交所代码猜 sh/sz 前缀**（腾讯源取不到，已显式拒绝；猜了会静默取错标的） |
+| 27 | **不要删 `data/cache/synth_*.csv` 或 `data/synth/*.txt` 而不重新生成**（它们已入库；缺了测试会失败） |
+
+---
+
+## 12. 2026-10-05 会话产出（P0.4c + 观察项扩展 + 观察哨打磨）
+
+### 12.1 P0.4c：合成主题指数能力（**本轮最大增量**）
+
+| 步 | 产出 |
+|---|---|
+| ① | 企业行为阈值由固定 22% 改为**按代码推定**（`price_limit`：主板 10% / 科创创业 20% / 基金 20% / 北交所 30%，+1pp；前 10 根豁免）⇒ 门禁「残余可疑」**3 → 0**，`sz002371` 从 21.95% 修到 10.02% |
+| ② | [`core/synth_index.py`](../core/synth_index.py)（等权逐日再平衡 + **OHLC 一起合成** + `synth:` 加载）+ [`scripts/build_synth_index.py`](build_synth_index.py) + 16 单测 |
+| ③ | 稀土：题材 801016 的 80 只 → 人工复核 **24 只**；电网设备：题材 801346 的 500 只 → **39 只** |
+| ④ | 合成指数 **2855 根（2015 起，11.7 年）**；稀土 0.941~0.943、电网设备 0.844~0.914 ⇒ **P0.4b「需合成」归零** |
+
+**两个口径陷阱（已记录）**：
+1. **`time_in` 常是批量分类日期**（稀土 24 只里 13 只完全相同 2018-09-20）⇒ 严格按它过滤只剩 8 年历史；
+   `--ignore-time-in` 拿到 11.7 年且相关性几乎不变 ⇒ **采用忽略口径**。
+2. **合成指数必须真合成 OHLC** —— L1 的摆动点用 `high`/`low` 判极值，只给 close 会让摆动点退化成"收盘价极值"。
+
+### 12.2 观察项从 0 扩到 12 个
+
+`WATCH_ONLY`：红利、电力、有色金属、煤炭、银行、军工、创新药、机器人、证券、稀土、卫星、航天。
+两套机制：**代理项**（`proxy_of`，卫星/航天复用军工的指数 —— 不各挑一个，否则把"重复"伪装成"独立覆盖"）
+与 **合成指数项**（`synth:`）。**已评估但未加入**：恒生科技（港股，不在 sh/sz 通道）。
+
+### 12.3 观察哨打磨（都由用户提问引出）
+
+| 改动 | 原因 |
+|---|---|
+| RS 列退化时显示 `⚠️✅`/`⚠️·` | 原来只印一个 `⚠️`，把"亮没亮"盖住了 |
+| 「结构已破」只认最近 20 个交易日 | 原判据"历史上曾转多"几乎是常量，所有行都印同一句 |
+| 新增 `⏳ 待下一根确认` 状态 | 条件今天已满足但按 §① 要等确认（如 2026-09-30 的创新药） |
+| **新增「大盘」列**（固定沪深300） | 风格锚在 6 个主题上退化（0.851/0.903）⇒ 加一列互补视角，**不动冻结参数** |
+| 历史 <10 年 / 重叠 <500 日 告警 | 机器人/科创系、电网设备 |
+| 列宽放宽、表头加图例 | `synth:电网设备` 是 11 字符，原来被挤爆 |
+
+### 12.4 修掉的坑（都已加测试）
+
+1. `ev.iloc[N:]` 砍的是"事件列表前 N 条"而不是"前 N 根内的事件" ⇒ 几乎全部事件被丢弃（门禁一度报 12 个 ❌）
+2. 上市豁免把短序列整段豁免掉 ⇒ 加 `≥250 根` 护栏
+3. `build_index_from_ohlc` 的 `level` 忘了按 `min_members` 掩码 ⇒ 成分股不足的日子给出 1000 点
+4. `build_synth_index` 里 `for raw, tx in kept` 解包顺序反了 ⇒ `--rank` 永远输出空表
+5. 北交所 `920xxx` 会被猜成 `sh920xxx`（取错标的）⇒ 显式拒绝
+6. 状态标签块跑在"大盘"计算之前 ⇒ 双强却显示"风格强，大盘弱"
+7. **`data/cache/synth_*.csv` 与 `data/synth/*.txt` 原本被 gitignore** ⇒ 新克隆会**测试失败**；已放行入库
+
+**git**：`b947895`…`52e2cae` 共 12 个提交（**已提交未 push**）。
