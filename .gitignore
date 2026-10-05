@@ -39,7 +39,15 @@ node_modules/
 .env
 node_modules/
 .env
-data/
+# data/ 整体忽略，但**合成指数的定义与产物必须入库**：
+#   THEMES[电网设备].index 与 WATCH_ONLY[稀土].index 都指向 synth:*；
+#   缺这两个文件会导致 tests/test_theme_universe.py 与 tests/test_theme_sentinel.py 失败，
+#   观察哨与审计也会把这两个主题报成「数据不可用」。合计约 630 KB。
+data/*
+!data/synth/
+!data/cache/
+data/cache/*
+!data/cache/synth_*.csv
 
 # DSH harness code-index（本机工具产物，不入库）
 .dsh-code-index/
