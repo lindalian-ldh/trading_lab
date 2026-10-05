@@ -239,12 +239,12 @@ def format_sentinel(rows: list, as_of=None) -> str:
 
     def _row(r) -> str:
         if not r["available"]:
-            return (f"  {_name(r)}{str(r['index']):<9}{str(r['anchor']):<9}"
+            return (f"  {_name(r)}{str(r['index']):<15}{str(r['anchor']):<9}"
                     f"{r['bars']:>6}  {(r['last_bar'] or '-'):<12}"
                     f"{'?':>4}{'?':>4}{'?':>4}  {r['status']}")
         rs = ("N/A" if not r["rs_available"]
               else ("⚠️" if r["rs_weak"] else ("✅" if r["rs"] else "·")))
-        return (f"  {_name(r)}{str(r['index']):<9}{str(r['anchor']):<9}"
+        return (f"  {_name(r)}{str(r['index']):<15}{str(r['anchor']):<9}"
                 f"{r['bars']:>6}  {r['last_bar']:<12}"
                 f"{'🔵' if r['l1'] else '·':>4}{'⚡' if r['l2'] else '·':>4}{rs:>4}"
                 f"  {r['status']}")
@@ -252,9 +252,9 @@ def format_sentinel(rows: list, as_of=None) -> str:
     def _head(title: str) -> None:
         lines.append("")
         lines.append(f"  {title}")
-        lines.append(f"  {'主题':<15}{'指数':<9}{'锚':<9}{'根数':>6}  {'最后交易日':<12}"
+        lines.append(f"  {'主题':<15}{'指数':<15}{'锚':<9}{'根数':>6}  {'最后交易日':<12}"
                      f"{'L1':>4}{'L2':>4}{'RS':>4}  状态")
-        lines.append("  " + "-" * 100)
+        lines.append("  " + "-" * 106)
 
     themes = [r for r in rows if r.get("kind", "theme") == "theme"]
     watch = [r for r in rows if r.get("kind", "theme") == "watch"]

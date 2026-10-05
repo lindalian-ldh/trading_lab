@@ -78,10 +78,17 @@ def test_all_anchors_are_fetchable_indices():
 
 
 def test_optional_index_codes_are_valid_if_present():
+    """``index`` 要么是登记过的交易所指数，要么是**已落盘的合成指数**（``synth:``）。"""
     from core.marketdata_tx import INDEX_CODES
-    for t in TU.THEMES:
+    from core.synth_index import is_synth_code, load_synth
+    for t in TU.THEMES + TU.WATCH_ONLY:
         idx = t.get("index")
-        if idx:
+        if not idx:
+            continue
+        if is_synth_code(idx):
+            assert load_synth(idx) is not None, \
+                f"{t['theme']} 的合成指数 {idx} 缓存不存在（先跑 build_synth_index.py --save）"
+        else:
             assert idx in INDEX_CODES, f"{t['theme']} 的 index {idx} 不在 INDEX_CODES"
 
 

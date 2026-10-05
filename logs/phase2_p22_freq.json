@@ -229,27 +229,27 @@
   },
   {
     "theme": "电网设备",
-    "index": "sz399808",
+    "index": "synth:电网设备",
     "anchor": "sh000001",
     "bars": 1945,
     "years": 7.98,
     "degenerate_rs": false,
     "freq": {
       "L1": {
-        "episodes": 40,
-        "per_year": 5.01
+        "episodes": 35,
+        "per_year": 4.38
       },
       "L2": {
-        "episodes": 11,
-        "per_year": 1.38
+        "episodes": 15,
+        "per_year": 1.88
       },
       "RS": {
-        "episodes": 58,
-        "per_year": 7.26
+        "episodes": 47,
+        "per_year": 5.89
       },
       "L1+L2": {
-        "episodes": 4,
-        "per_year": 0.5
+        "episodes": 3,
+        "per_year": 0.38
       },
       "L1+L2+RS": {
         "episodes": 3,
@@ -257,13 +257,13 @@
       }
     },
     "day_share": {
-      "L1": 0.204,
-      "L2": 0.006,
-      "RS": 0.384,
+      "L1": 0.169,
+      "L2": 0.008,
+      "RS": 0.396,
       "L1+L2": 0.002,
       "L1+L2+RS": 0.002
     },
-    "note": "❌ 联合频次 0.5 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+    "note": "❌ 联合频次 0.38 次/年 < 2.0 ⇒ 触发 kill criterion 3"
   },
   {
     "theme": "科创半导体",
@@ -754,6 +754,44 @@
       "L1": 0.173,
       "L2": 0.007,
       "RS": 0.344,
+      "L1+L2": 0.002,
+      "L1+L2+RS": 0.002
+    },
+    "note": "❌ 联合频次 0.5 次/年 < 2.0 ⇒ 触发 kill criterion 3"
+  },
+  {
+    "theme": "稀土",
+    "index": "synth:稀土",
+    "anchor": "sh000300",
+    "bars": 1945,
+    "years": 7.98,
+    "degenerate_rs": false,
+    "freq": {
+      "L1": {
+        "episodes": 33,
+        "per_year": 4.13
+      },
+      "L2": {
+        "episodes": 16,
+        "per_year": 2.0
+      },
+      "RS": {
+        "episodes": 62,
+        "per_year": 7.77
+      },
+      "L1+L2": {
+        "episodes": 4,
+        "per_year": 0.5
+      },
+      "L1+L2+RS": {
+        "episodes": 3,
+        "per_year": 0.38
+      }
+    },
+    "day_share": {
+      "L1": 0.161,
+      "L2": 0.008,
+      "RS": 0.369,
       "L1+L2": 0.002,
       "L1+L2+RS": 0.002
     },

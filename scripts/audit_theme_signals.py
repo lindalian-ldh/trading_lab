@@ -116,18 +116,18 @@ def main() -> int:
         print(f"     🔒 OOS 锁定段 {OOS_START} ~ {OOS_END} **未计算**（P0.5 §⑦：只看一次）")
         print(f"     口径：片段数（相邻 ≤{EPISODE_GAP} 日合并为 1 段）/ 年")
         print("=" * 122)
-        print(f"  {'主题':<14}{'指数':<9}{'锚':<9}{'bars':>5}{'年':>5}  "
+        print(f"  {'主题':<14}{'指数':<15}{'锚':<9}{'bars':>5}{'年':>5}  "
               + "  ".join(f"{k:>11}" for k in LAYERS))
         print("  " + "-" * 116)
         for r in rows:
             if not r["freq"]:
-                print(f"  {r['theme']:<14}{str(r['index']):<9}{str(r['anchor']):<9}"
+                print(f"  {r['theme']:<14}{str(r['index']):<15}{str(r['anchor']):<9}"
                       f"{r['bars']:>5}{r['years']:>5}  {r['note']}")
                 continue
             cells = "  ".join(
                 f"{r['freq'][k]['episodes']:>3}({r['freq'][k]['per_year']:>4.2f}/y)"
                 for k in LAYERS)
-            print(f"  {r['theme']:<14}{str(r['index']):<9}{str(r['anchor']):<9}"
+            print(f"  {r['theme']:<14}{str(r['index']):<15}{str(r['anchor']):<9}"
                   f"{r['bars']:>5}{r['years']:>5}  {cells}")
 
         # —— 独立价格序列去重（10 个主题 ≠ 10 个独立检验）——

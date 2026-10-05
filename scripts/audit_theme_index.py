@@ -151,18 +151,18 @@ def main() -> int:
         print("=" * 118)
         print(f"主题指数可用性审计（P0.4b）—— 判据: 指数历史 ≥{MIN_YEARS:.0f}y 且 与 ETF 日收益相关性 ≥{MIN_CORR}")
         print("=" * 118)
-        print(f"  {'主题':<14} {'指数':<9} {'根数':>6} {'年数':>5}  "
+        print(f"  {'主题':<14} {'指数':<15} {'根数':>6} {'年数':>5}  "
               f"{'ETF':<9} {'重叠':>6} {'corr':>7} {'近500':>7} {'c500':>7}  判定")
         print("  " + "-" * 112)
         for r in rows:
             if not r["etfs"]:
-                print(f"  {r['theme']:<14} {str(r['index']):<9} {r['index_bars']:>6} "
+                print(f"  {r['theme']:<14} {str(r['index']):<15} {r['index_bars']:>6} "
                       f"{(r['index_years'] or 0):>5.1f}  {'(无执行 ETF)':<9} "
                       f"{'-':>6} {'-':>7} {'-':>7} {'-':>7}  "
                       f"{'❌' if r['level']=='fail' else '⚠️'} {r['verdict']}")
                 continue
             for i, e in enumerate(r["etfs"]):
-                head = (f"  {r['theme']:<14} {str(r['index']):<9} {r['index_bars']:>6} "
+                head = (f"  {r['theme']:<14} {str(r['index']):<15} {r['index_bars']:>6} "
                         f"{(r['index_years'] or 0):>5.1f}  ") if i == 0 else "  " + " " * 44
                 mark = {"ok": "✅", "fail": "❌", "warn": "⚠️"}[r["level"]] if i == 0 else " "
                 verdict = r["verdict"] if i == 0 else ""
